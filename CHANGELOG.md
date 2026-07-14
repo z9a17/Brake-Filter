@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.4
+
+- Changed Advanced velocity to use physical distance per report as the primary motion signal instead of each individual host-timed interval.
+- Added an allocation-free 32-report rolling period estimator to preserve the existing mm/s setting semantics across tablet report rates.
+- Made the timing estimate resistant to USB report batching, very short arrival intervals, and host scheduling pauses.
+- Kept position reports completely unbuffered; the estimator changes only velocity calibration and adds no cursor-report latency.
+- Added deterministic coverage for steady rates, burst delivery, pauses, rate changes, reset behavior, and allocations.
+
 ## v0.2.3
 
 - Split the two large implementation files into focused pipeline, settings, movement, advanced integration, endpoint, state, and math files.

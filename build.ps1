@@ -11,7 +11,7 @@ $testProject = Join-Path $root "tests\BrakeFilter.Tests.csproj"
 $builtDll = Join-Path $root "source\bin\$Configuration\net8.0\BrakeFilter.dll"
 $releaseDirectory = Join-Path $root "release"
 $releaseDll = Join-Path $releaseDirectory "BrakeFilter.dll"
-$releaseZip = Join-Path $releaseDirectory "Brake-Filter-v0.2.3.zip"
+$releaseZip = Join-Path $releaseDirectory "Brake-Filter-v0.2.4.zip"
 
 dotnet build $sourceProject --configuration $Configuration
 if ($LASTEXITCODE -ne 0) {

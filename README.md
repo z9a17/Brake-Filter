@@ -1,4 +1,4 @@
-# Brake Filter v0.2.3
+# Brake Filter v0.2.4
 
 Brake Filter is a low-latency OpenTabletDriver 0.6.7 pre-transform filter. It combines the Consistent Aim movement anti-chatter and bounded slow-movement braking with optional advanced endpoint and fast-aim stability.
 
@@ -48,14 +48,14 @@ From PowerShell in this directory:
 .\build.ps1
 ```
 
-The script restores dependencies from NuGet, builds the plugin, runs 11 focused core tests, and produces:
+The script restores dependencies from NuGet, builds the plugin, runs 12 focused core tests, and produces:
 
 - `release\BrakeFilter.dll`
-- `release\Brake-Filter-v0.2.3.zip`
+- `release\Brake-Filter-v0.2.4.zip`
 
 ## Install and set up
 
-1. Download `Brake-Filter-v0.2.3.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
+1. Download `Brake-Filter-v0.2.4.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
 2. Open OpenTabletDriver and make sure your tablet is detected.
 3. Open **Plugins > Open Plugin Manager**.
 4. In the Plugin Manager, choose **Install plugin...** and select the downloaded ZIP.
@@ -85,6 +85,9 @@ Use only this filter while tuning it. Stacking multiple smoothing or anti-chatte
 - Braking is anchored to the previous raw report, preventing recursive lag accumulation.
 - Anti-chatter output remains spatially bounded relative to the raw pen position.
 - Movement Anti-Chatter and Fast Aim Stability run in one bounded stage rather than two stacked spatial filters.
+- Advanced velocity uses physical distance per tablet report as its primary signal.
+- A 32-report rolling period estimate converts that distance to mm/s while resisting USB batching and host scheduling jitter.
+- The period estimate never buffers or averages positions, so it adds no cursor-report latency.
 - Stability Radius is endpoint-only and remains transparent during continuous movement.
 - Advanced features have a separate off-by-default gate and reset cleanly when toggled.
 - Stop Assist uses a bounded two-tap FIR rather than a recursive smoothing tail.
@@ -100,6 +103,7 @@ Use only this filter while tuning it. Stacking multiple smoothing or anti-chatte
 - `BrakeDeadzoneFilter.Advanced.cs` connects tablet scaling and advanced processing.
 - `AdvancedAimEngine.cs` contains the advanced processing flow.
 - `AdvancedAimEngine.Endpoint.cs`, `.State.cs`, and `.Settings.cs` separate endpoint detection, state transitions, and configuration.
+- `ReportPeriodEstimator.cs` provides allocation-free report-rate calibration for Advanced velocity.
 - `AimMath.cs` contains the shared allocation-free numeric helpers.
 
 ## License
