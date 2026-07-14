@@ -17,7 +17,7 @@ The plugin is displayed simply as `Brake Filter` inside OpenTabletDriver. Versio
 | Brake Strength | 0.45 | 0.00-1.00 | Steadies slow movement near a stop. Zero disables it. |
 | Brake Start Speed | 90 | 1-10000 raw units/report | Braking fades in below this speed and is off at or above it. |
 
-These settings always work, even when Advanced Features is off. The suggested starting ranges in the tooltips target a Wacom PTH-660 at 200 Hz. Other tablets and report rates may need different values. The higher ceilings allow high-resolution, full-area tablets such as the PTK-1240 to tune around reports above 2000 raw units. PTK-1240-scale input is covered by automated tests, but has not been tested here on PTK-1240 hardware.
+These settings always work, even when Advanced Features is off. The suggested starting ranges in the tooltips target a Wacom PTH-660 at 200 Hz. Other tablets and report rates may need different values. 
 
 ## Advanced settings
 
