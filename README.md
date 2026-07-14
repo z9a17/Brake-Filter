@@ -17,7 +17,7 @@ The plugin is displayed simply as `Brake Filter` inside OpenTabletDriver. Versio
 | Brake Strength | 0.45 | 0.00-0.95 | Steadies slow movement near a stop. Zero disables it. |
 | Brake Start Speed | 90 | 1-1000 raw units/report | Braking fades in below this speed and is off at or above it. |
 
-These settings always work, even when Advanced Features is off. The suggested starting ranges in the tooltips target a Wacom PTH-660 at 200 Hz. Other tablets and report rates may need different values.
+These settings always work, even when Advanced Features is off. The suggested starting ranges in the tooltips target a Wacom PTH-660 at 200 Hz. Other tablets and report rates may need different values. This filter has also only been tested with the Wacom PTH-660.
 
 ## Advanced settings
 
