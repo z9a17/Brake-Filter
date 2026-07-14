@@ -5,19 +5,19 @@ using System.Runtime.CompilerServices;
 namespace BrakeFilter;
 
 /// <summary>
-/// Allocation-free spatial aim filter. All positions are physical millimetres
-/// and time is expressed in seconds.
+/// Allocation-free endpoint-only assistance. Input positions are already
+/// anti-chattered by the normal stage and are expressed in millimetres.
+/// StabilityRadius never filters continuous movement; it is used only to
+/// recognize and hold an actual stationary endpoint.
 /// </summary>
 public sealed class AdvancedAimEngine
 {
     public const float DefaultStabilityRadius = 0.05f;
     public const float DefaultStopAssist = 0.25f;
-    public const float DefaultFastAimStability = 0.80f;
     public const float DefaultFastAimThreshold = 120f;
 
     public const float MaximumStabilityRadius = 0.20f;
     public const float MaximumStopAssist = 0.50f;
-    public const float MaximumFastAimStability = 1f;
     public const float MinimumFastAimThreshold = 40f;
     public const float MaximumFastAimThreshold = 500f;
 
@@ -25,14 +25,12 @@ public sealed class AdvancedAimEngine
     private const float MaximumDeltaTime = 0.020f;
     private const float ResetTime = 0.050f;
     private const float PeakReleaseSeconds = 0.050f;
-    private const float AxisBlendSeconds = 0.012f;
-    private const float CornerCosine = 0.50f;
     private const float StopCandidateSpeed = 60f;
     private const float StopDwellSeconds = 0.010f;
     private const float StopWindowSeconds = 0.030f;
     private const float StationaryCoherence = 0.55f;
-    private const float MaximumBrakeAmount = 0.85f;
-    private const float Tiny = 1e-12f;
+    private const float MaximumBrakeAmount = 0.50f;
+    private const float MaximumStopAssistOffset = 0.10f;
 
     private bool _initialized;
     private bool _settled;
@@ -42,15 +40,13 @@ public sealed class AdvancedAimEngine
     private float _stationarySeconds;
     private float _stationaryPath;
     private Vector2 _stationaryOrigin;
-    private Vector2 _previousRaw;
-    private Vector2 _target;
+    private Vector2 _previousInput;
+    private Vector2 _holdAnchor;
     private Vector2 _output;
-    private Vector2 _axis;
     private float _peakSpeed;
 
     private float _stabilityRadius = DefaultStabilityRadius;
     private float _stopAssist = DefaultStopAssist;
-    private float _fastAimStability = DefaultFastAimStability;
     private float _fastAimThreshold = DefaultFastAimThreshold;
 
     public float StabilityRadius
@@ -63,12 +59,6 @@ public sealed class AdvancedAimEngine
     {
         get => _stopAssist;
         set => _stopAssist = ClampFinite(value, 0f, MaximumStopAssist, DefaultStopAssist);
-    }
-
-    public float FastAimStability
-    {
-        get => _fastAimStability;
-        set => _fastAimStability = ClampFinite(value, 0f, MaximumFastAimStability, DefaultFastAimStability);
     }
 
     public float FastAimThreshold
@@ -90,52 +80,53 @@ public sealed class AdvancedAimEngine
         _settled = false;
         _wasAboveStopCandidateSpeed = false;
         ResetStationaryCandidate();
-        _previousRaw = Vector2.Zero;
-        _target = Vector2.Zero;
+        _previousInput = Vector2.Zero;
+        _holdAnchor = Vector2.Zero;
         _output = Vector2.Zero;
-        _axis = Vector2.Zero;
         _peakSpeed = 0f;
     }
 
-    public Vector2 Reset(Vector2 rawPosition)
+    public Vector2 Reset(Vector2 inputPosition)
     {
-        if (!IsFinite(rawPosition))
+        if (!IsFinite(inputPosition))
         {
             Clear();
-            return rawPosition;
+            return inputPosition;
         }
 
         _initialized = true;
         _settled = false;
         _wasAboveStopCandidateSpeed = false;
         ResetStationaryCandidate();
-        _previousRaw = rawPosition;
-        _target = rawPosition;
-        _output = rawPosition;
-        _axis = Vector2.Zero;
+        _previousInput = inputPosition;
+        _holdAnchor = inputPosition;
+        _output = inputPosition;
         _peakSpeed = 0f;
-        return rawPosition;
+        return inputPosition;
     }
 
-    public Vector2 Process(Vector2 rawPosition, float deltaTimeSeconds)
+    public Vector2 Process(Vector2 inputPosition, float deltaTimeSeconds)
     {
-        if (!IsFinite(rawPosition))
+        if (!IsFinite(inputPosition))
         {
             Clear();
-            return rawPosition;
+            return inputPosition;
         }
 
-        if (!_initialized || !float.IsFinite(deltaTimeSeconds) || deltaTimeSeconds <= 0f || deltaTimeSeconds > ResetTime)
+        if (!_initialized ||
+            !float.IsFinite(deltaTimeSeconds) ||
+            deltaTimeSeconds <= 0f ||
+            deltaTimeSeconds > ResetTime)
         {
-            return Reset(rawPosition);
+            return Reset(inputPosition);
         }
 
         float dt = Math.Clamp(deltaTimeSeconds, MinimumDeltaTime, MaximumDeltaTime);
-        Vector2 rawDelta = rawPosition - _previousRaw;
-        float distanceSquared = rawDelta.LengthSquared();
+        Vector2 inputDelta = inputPosition - _previousInput;
+        float distanceSquared = inputDelta.LengthSquared();
         if (!float.IsFinite(distanceSquared))
         {
-            return Reset(rawPosition);
+            return Reset(inputPosition);
         }
 
         float distance = MathF.Sqrt(distanceSquared);
@@ -144,54 +135,33 @@ public sealed class AdvancedAimEngine
         _peakSpeed = MathF.Max(speed, previousPeak * MathF.Exp(-dt / PeakReleaseSeconds));
 
         float holdRadius = StabilityRadius * 1.33f;
-        float maximumOffset = MathF.Max(0.080f, StabilityRadius * 2f);
-
         if (_settled)
         {
-            float anchorDistance = Vector2.Distance(rawPosition, _target);
-            if (StabilityRadius > 0f && anchorDistance <= holdRadius)
+            if (StabilityRadius > 0f && Vector2.Distance(inputPosition, _holdAnchor) <= holdRadius)
             {
-                _previousRaw = rawPosition;
+                _previousInput = inputPosition;
                 _peakSpeed = MathF.Min(_peakSpeed, FastAimThreshold);
-                _output = _target;
+                _output = _holdAnchor;
                 return _output;
             }
 
             _settled = false;
             ResetStationaryCandidate();
-            _axis = distance > Tiny ? rawDelta / distance : Vector2.Zero;
-        }
-
-        bool cornerReset = UpdateUnsignedAxis(rawDelta, distance, speed, dt);
-        Vector2 previousTarget = _target;
-
-        if (cornerReset)
-        {
-            // A fast 60-90 degree turn is intentional much more often than it is
-            // chatter. Passing this one report prevents corner cutting.
-            _target = rawPosition;
-        }
-        else
-        {
-            float fastBlend = SmoothStep(speed, FastAimThreshold * 0.21f, FastAimThreshold);
-            ApplySpatialLeash(rawPosition, fastBlend);
-            _target = LimitOffsetFromRaw(_target, rawPosition, maximumOffset);
         }
 
         if (UpdateStationaryCandidate(
-            rawPosition,
+            inputPosition,
             distance,
             speed,
             dt,
             previousPeak,
             holdRadius))
         {
-            // Anchor to the already anti-chattered target. This ends the FIR in
-            // one step and guarantees that the cursor cannot creep after a stop.
             _settled = true;
+            _holdAnchor = inputPosition;
             ResetStationaryCandidate();
-            _previousRaw = rawPosition;
-            _output = _target;
+            _previousInput = inputPosition;
+            _output = inputPosition;
             return _output;
         }
 
@@ -205,66 +175,28 @@ public sealed class AdvancedAimEngine
             speed,
             FastAimThreshold * 0.29f,
             FastAimThreshold * 0.75f);
-        float decelerationFactor = dropFactor * approachFactor * endpointFactor;
         float brakeAmount = Math.Clamp(
-            StopAssist * decelerationFactor,
+            StopAssist * dropFactor * approachFactor * endpointFactor,
             0f,
             MaximumBrakeAmount);
 
-        // This is a two-tap FIR over anti-chattered targets, not a recursive EMA.
-        // Therefore any braking tail is strictly bounded to one input report.
-        _output = Vector2.Lerp(_target, previousTarget, brakeAmount);
-        _output = LimitOffsetFromRaw(_output, rawPosition, maximumOffset);
+        // One two-tap FIR over the normal-stage positions. StabilityRadius does
+        // not participate here, so it cannot duplicate Movement Anti-Chatter.
+        _output = brakeAmount > 0f
+            ? Vector2.Lerp(inputPosition, _previousInput, brakeAmount)
+            : inputPosition;
+        _output = LimitOffsetFromInput(_output, inputPosition, MaximumStopAssistOffset);
         if (!IsFinite(_output))
         {
-            return Reset(rawPosition);
+            return Reset(inputPosition);
         }
 
-        _previousRaw = rawPosition;
+        _previousInput = inputPosition;
         return _output;
     }
 
-    private bool UpdateUnsignedAxis(Vector2 rawDelta, float distance, float speed, float dt)
-    {
-        if (distance <= Tiny || speed < FastAimThreshold * 0.21f)
-        {
-            return false;
-        }
-
-        Vector2 currentDirection = rawDelta / distance;
-        if (_axis.LengthSquared() <= Tiny)
-        {
-            _axis = currentDirection;
-            return false;
-        }
-
-        float signedDot = Vector2.Dot(_axis, currentDirection);
-        float unsignedDot = MathF.Abs(signedDot);
-        float cornerSpeed = MathF.Max(40f, FastAimThreshold * 0.67f);
-        if (speed >= cornerSpeed && unsignedDot < CornerCosine)
-        {
-            _axis = currentDirection;
-            return true;
-        }
-
-        // Treat the motion axis as unsigned. A 180-degree reverse jump stays on
-        // the same stable line instead of cancelling the direction vector.
-        if (signedDot < 0f)
-        {
-            currentDirection = -currentDirection;
-        }
-
-        float amount = 1f - MathF.Exp(-dt / AxisBlendSeconds);
-        Vector2 blended = Vector2.Lerp(_axis, currentDirection, amount);
-        float lengthSquared = blended.LengthSquared();
-        _axis = lengthSquared > Tiny && float.IsFinite(lengthSquared)
-            ? blended / MathF.Sqrt(lengthSquared)
-            : currentDirection;
-        return false;
-    }
-
     private bool UpdateStationaryCandidate(
-        Vector2 rawPosition,
+        Vector2 inputPosition,
         float reportDistance,
         float speed,
         float dt,
@@ -293,18 +225,13 @@ public sealed class AdvancedAimEngine
             _wasAboveStopCandidateSpeed = false;
         }
 
-        // Begin a fresh endpoint window at the first large speed drop. This
-        // prevents the preceding fast stroke from making a true stop appear
-        // directionally coherent.
         if (strongDeceleration)
         {
-            StartStationaryCandidate(rawPosition);
+            StartStationaryCandidate(inputPosition);
             return false;
         }
 
-        float localDistance = Vector2.Distance(rawPosition, _target);
-        bool eligible = speed <= StopCandidateSpeed || localDistance <= holdRadius * 1.25f;
-        if (!eligible)
+        if (speed > StopCandidateSpeed)
         {
             ResetStationaryCandidate();
             return false;
@@ -312,7 +239,7 @@ public sealed class AdvancedAimEngine
 
         if (!_stationaryCandidate)
         {
-            StartStationaryCandidate(rawPosition);
+            StartStationaryCandidate(inputPosition);
             return false;
         }
 
@@ -320,11 +247,11 @@ public sealed class AdvancedAimEngine
         _stationarySamples++;
         _stationaryPath += reportDistance;
 
-        float netDistance = Vector2.Distance(rawPosition, _stationaryOrigin);
+        float netDistance = Vector2.Distance(inputPosition, _stationaryOrigin);
         float maximumSpread = MathF.Max(holdRadius * 2f, StabilityRadius * 1.5f);
         if (netDistance > maximumSpread)
         {
-            StartStationaryCandidate(rawPosition);
+            StartStationaryCandidate(inputPosition);
             return false;
         }
 
@@ -342,19 +269,19 @@ public sealed class AdvancedAimEngine
 
         if (_stationarySeconds >= StopWindowSeconds)
         {
-            StartStationaryCandidate(rawPosition);
+            StartStationaryCandidate(inputPosition);
         }
 
         return false;
     }
 
-    private void StartStationaryCandidate(Vector2 rawPosition)
+    private void StartStationaryCandidate(Vector2 inputPosition)
     {
         _stationaryCandidate = true;
         _stationarySamples = 0;
         _stationarySeconds = 0f;
         _stationaryPath = 0f;
-        _stationaryOrigin = rawPosition;
+        _stationaryOrigin = inputPosition;
     }
 
     private void ResetStationaryCandidate()
@@ -366,64 +293,13 @@ public sealed class AdvancedAimEngine
         _stationaryOrigin = Vector2.Zero;
     }
 
-    private void ApplySpatialLeash(Vector2 rawPosition, float fastBlend)
-    {
-        Vector2 error = rawPosition - _target;
-        if (StabilityRadius <= 0f)
-        {
-            _target = rawPosition;
-            return;
-        }
-
-        if (_axis.LengthSquared() <= Tiny || fastBlend <= 0f)
-        {
-            _target += Shrink(error, StabilityRadius);
-            return;
-        }
-
-        float fastParallelRadius = MathF.Max(0.004f, StabilityRadius * 0.18f);
-        float fastPerpendicularRadius = Lerp(
-            StabilityRadius * 0.35f,
-            StabilityRadius * 1.50f,
-            FastAimStability);
-        float parallelRadius = Lerp(StabilityRadius, fastParallelRadius, fastBlend);
-        float perpendicularRadius = Lerp(StabilityRadius, fastPerpendicularRadius, fastBlend);
-
-        float parallelDistance = Vector2.Dot(error, _axis);
-        Vector2 perpendicular = error - _axis * parallelDistance;
-        _target += _axis * ShrinkScalar(parallelDistance, parallelRadius) +
-            Shrink(perpendicular, perpendicularRadius);
-    }
-
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Vector2 Shrink(Vector2 value, float radius)
+    private static Vector2 LimitOffsetFromInput(
+        Vector2 value,
+        Vector2 inputPosition,
+        float maximumOffset)
     {
-        if (radius <= 0f)
-        {
-            return value;
-        }
-
-        float lengthSquared = value.LengthSquared();
-        if (lengthSquared <= radius * radius)
-        {
-            return Vector2.Zero;
-        }
-
-        float length = MathF.Sqrt(lengthSquared);
-        return value * ((length - radius) / length);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static float ShrinkScalar(float value, float radius)
-    {
-        float magnitude = MathF.Abs(value);
-        return magnitude <= radius ? 0f : MathF.CopySign(magnitude - radius, value);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Vector2 LimitOffsetFromRaw(Vector2 value, Vector2 rawPosition, float maximumOffset)
-    {
-        Vector2 offset = value - rawPosition;
+        Vector2 offset = value - inputPosition;
         float lengthSquared = offset.LengthSquared();
         if (lengthSquared <= maximumOffset * maximumOffset)
         {
@@ -431,7 +307,7 @@ public sealed class AdvancedAimEngine
         }
 
         float length = MathF.Sqrt(lengthSquared);
-        return rawPosition + offset * (maximumOffset / length);
+        return inputPosition + offset * (maximumOffset / length);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -444,12 +320,6 @@ public sealed class AdvancedAimEngine
 
         float amount = Math.Clamp((value - start) / (end - start), 0f, 1f);
         return amount * amount * (3f - 2f * amount);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static float Lerp(float start, float end, float amount)
-    {
-        return start + (end - start) * amount;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

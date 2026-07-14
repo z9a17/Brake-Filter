@@ -1,4 +1,4 @@
-# Brake Filter v0.2
+# Brake Filter v0.2.1
 
 Brake Filter is a low-latency OpenTabletDriver 0.6.7 pre-transform filter. It combines the Consistent Aim movement anti-chatter and bounded slow-movement braking with optional advanced endpoint and fast-aim stability.
 
@@ -25,10 +25,18 @@ Advanced Features is **off by default**. Enable `Advanced Features (default: off
 
 | Setting | Default | Range | Effect |
 | --- | ---: | ---: | --- |
-| Stability Radius | 0.05 mm | 0.00-0.20 mm | Adds a small physical endpoint hold to contain shake after stopping. |
+| Stability Radius | 0.05 mm | 0.00-0.20 mm | Holds a confirmed stationary endpoint; it does not filter movement before the stop. |
 | Stop Assist | 0.25 | 0.00-0.50 | Adds a brief non-recursive brake during strong endpoint deceleration. |
-| Fast Aim Stability | 0.80 | 0.00-1.00 | Reduces sideways shake during fast jumps while preserving forward movement. |
-| Fast Aim Threshold | 120 mm/s | 40-500 mm/s | Controls when advanced movement becomes nearly raw and direct. |
+| Fast Aim Stability | 0.80 | 0.00-1.00 | Adds speed-scaled sideways strength inside the existing Movement Anti-Chatter stage. |
+| Fast Aim Threshold | 120 mm/s | 40-500 mm/s | Sets when fast lateral stability reaches full strength and calibrates Stop Assist. |
+
+## How the settings work together
+
+- **Movement Anti-Chatter** is the only general-purpose chatter filter and owns the maximum spatial leash.
+- **Fast Aim Stability** modifies that same anti-chatter calculation during fast movement. It is not another smoothing pass and cannot increase the leash.
+- **Brake Strength** acts on ordinary slow movement. **Stop Assist** acts only on a strong speed drop after an approach, so constant-speed movement is unaffected.
+- **Stability Radius** remains transparent during continuous movement. It is consulted only to confirm and hold a stationary endpoint.
+- Setting every advanced strength to zero makes the enabled advanced path transparent.
 
 ## Build and test
 
@@ -38,14 +46,14 @@ From PowerShell in this directory:
 .\build.ps1
 ```
 
-The script restores dependencies from NuGet, builds the plugin, runs all 28 regression tests, and produces:
+The script restores dependencies from NuGet, builds the plugin, runs all 31 regression tests, and produces:
 
 - `release\BrakeFilter.dll`
-- `release\Brake-Filter-v0.2.zip`
+- `release\Brake-Filter-v0.2.1.zip`
 
 ## Install and set up
 
-1. Download `Brake-Filter-v0.2.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
+1. Download `Brake-Filter-v0.2.1.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
 2. Open OpenTabletDriver and make sure your tablet is detected.
 3. Open **Plugins > Open Plugin Manager**.
 4. In the Plugin Manager, choose **Install plugin...** and select the downloaded ZIP.
@@ -63,8 +71,9 @@ Use only this filter while tuning it. Stacking multiple smoothing or anti-chatte
 - Increase **Brake Start Speed** in steps of 10-20 if braking engages too late. Decrease it if medium-speed aim feels restrained.
 - If the normal settings are not enough at endpoints, enable **Advanced Features** and start with its defaults.
 - Increase **Stop Assist** in steps of 0.05 for stronger endpoint braking.
-- Increase **Stability Radius** in steps of 0.01 mm if endpoint shake remains. Decrease it if micro-corrections feel sticky.
-- Lower **Fast Aim Threshold** for a snappier advanced response; raise it for more medium-speed stability.
+- Increase **Stability Radius** in steps of 0.01 mm if a settled endpoint releases too easily. It no longer affects normal micro-corrections before a stop.
+- Increase **Fast Aim Stability** for straighter fast jumps; decrease it if curves feel constrained.
+- Lower **Fast Aim Threshold** to engage the added fast stability sooner; raise it to reserve it for faster movement.
 - Test one change at a time. Values depend on the tablet resolution and report rate.
 
 ## Design notes
@@ -73,6 +82,8 @@ Use only this filter while tuning it. Stacking multiple smoothing or anti-chatte
 - Fast movement disables braking immediately.
 - Braking is anchored to the previous raw report, preventing recursive lag accumulation.
 - Anti-chatter output remains spatially bounded relative to the raw pen position.
+- Movement Anti-Chatter and Fast Aim Stability run in one bounded stage rather than two stacked spatial filters.
+- Stability Radius is endpoint-only and remains transparent during continuous movement.
 - Advanced features have a separate off-by-default gate and reset cleanly when toggled.
 - Stop Assist uses a bounded two-tap FIR rather than a recursive smoothing tail.
 - State resets only on an explicit out-of-range report, not ordinary far-hover reports.

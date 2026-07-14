@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.1
+
+- Removed continuous spatial filtering from Stability Radius; it now applies only after a stationary endpoint is confirmed.
+- Integrated Fast Aim Stability into the existing Movement Anti-Chatter stage instead of applying a second spatial filter.
+- Kept the Movement Anti-Chatter leash as the single maximum positional bound during movement.
+- Made Stop Assist transparent at constant speed and independent of Stability Radius.
+- Added compatibility tests proving endpoint-only radius behavior, zero-setting transparency, single-stage fast stability, and bounded output.
+
 ## v0.2.0
 
 - Combined the Consistent Aim anti-chatter/braking path with optional endpoint and fast-aim stability features.

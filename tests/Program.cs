@@ -15,7 +15,7 @@ internal static class Program
     private static int Main()
     {
         Run("Documented defaults are real object defaults", DefaultsAreInitialized);
-        Run("Assembly is v0.2 and OTD name has no version", VersionMetadataIsV02);
+        Run("Assembly is v0.2.1 and OTD name has no version", VersionMetadataIsV021);
         Run("Setting labels expose defaults and units", SettingMetadataIsVisible);
         Run("Advanced features are off by default and visibly gated", AdvancedMetadataIsGated);
         Run("First tablet report passes through unchanged", FirstReportPassesThrough);
@@ -31,9 +31,12 @@ internal static class Program
         Run("Disabled advanced settings cannot change basic output", DisabledAdvancedSettingsAreTransparent);
         Run("Enabling advanced features starts without a position jump", EnablingAdvancedStartsCleanly);
         Run("Incomplete OTD tablet references fall back safely", IncompleteTabletReferenceIsSafe);
-        Run("Advanced stationary chatter is held", AdvancedStationaryChatterIsHeld);
+        Run("Stability Radius is transparent during continuous movement", StabilityRadiusIsEndpointOnly);
+        Run("Advanced stationary endpoint chatter is held", AdvancedStationaryChatterIsHeld);
         Run("Advanced fast jumps stay direct", AdvancedFastJumpsStayDirect);
-        Run("Advanced fast lateral shake is reduced", AdvancedFastLateralShakeIsReduced);
+        Run("Fast Aim Stability shares the bounded anti-chatter stage", FastAimStabilityUsesSingleBoundedStage);
+        Run("Zero advanced settings are transparent", ZeroAdvancedSettingsAreTransparent);
+        Run("Stop Assist is transparent at constant speed", StopAssistIsConstantSpeedTransparent);
         Run("Advanced stop assist reacts to endpoint deceleration", AdvancedStopAssistReacts);
         Run("Advanced endpoint hold releases on new intent", AdvancedHoldReleases);
         Run("Advanced output remains spatially bounded", AdvancedOutputIsLeashed);
@@ -45,7 +48,7 @@ internal static class Program
 
         if (Failures.Count == 0)
         {
-            Console.WriteLine("All 28 tests passed.");
+            Console.WriteLine("All 31 tests passed.");
             PrintHotPathBenchmark();
             return 0;
         }
@@ -86,10 +89,10 @@ internal static class Program
         Equal(120f, filter.FastAimThreshold);
     }
 
-    private static void VersionMetadataIsV02()
+    private static void VersionMetadataIsV021()
     {
         Version? version = typeof(BrakeDeadzoneFilter).Assembly.GetName().Version;
-        True(version == new Version(0, 2, 0, 0), $"Unexpected assembly version: {version}");
+        True(version == new Version(0, 2, 1, 0), $"Unexpected assembly version: {version}");
 
         PluginNameAttribute? name = typeof(BrakeDeadzoneFilter)
             .GetCustomAttributes(typeof(PluginNameAttribute), inherit: false)
@@ -366,20 +369,44 @@ internal static class Program
         Equal(new Vector2(123f, 456f), first.Position);
     }
 
+    private static void StabilityRadiusIsEndpointOnly()
+    {
+        var noRadius = new AdvancedAimEngine { StabilityRadius = 0f, StopAssist = 0f };
+        var largeRadius = new AdvancedAimEngine { StabilityRadius = 0.20f, StopAssist = 0f };
+        noRadius.Reset(Vector2.Zero);
+        largeRadius.Reset(Vector2.Zero);
+
+        for (int index = 1; index <= 400; index++)
+        {
+            Vector2 input = new(index * 0.05f, index * 0.01f);
+            Equal(input, noRadius.Process(input, 0.005f), 0.000001f);
+            Equal(input, largeRadius.Process(input, 0.005f), 0.000001f);
+        }
+
+        True(!largeRadius.IsSettled,
+            "Directed continuous movement was incorrectly classified as an endpoint.");
+    }
+
     private static void AdvancedStationaryChatterIsHeld()
     {
         var engine = new AdvancedAimEngine();
         engine.Reset(Vector2.Zero);
-        Vector2 output = Vector2.Zero;
+        float minimum = float.PositiveInfinity;
+        float maximum = float.NegativeInfinity;
         for (int index = 0; index < 200; index++)
         {
-            float x = (index & 1) == 0 ? 0.035f : -0.035f;
-            float y = (index % 3 - 1) * 0.012f;
-            output = engine.Process(new Vector2(x, y), 0.005f);
+            float x = (index & 1) == 0 ? 0.020f : -0.020f;
+            Vector2 output = engine.Process(new Vector2(x, 0f), 0.005f);
+            if (index >= 20)
+            {
+                minimum = MathF.Min(minimum, output.X);
+                maximum = MathF.Max(maximum, output.X);
+            }
         }
 
-        True(output.Length() < 0.005f, $"Advanced chatter escaped to {output}.");
         True(engine.IsSettled, "Advanced endpoint hold never settled.");
+        True(maximum - minimum < 0.000001f,
+            $"Settled endpoint still moved by {maximum - minimum} mm.");
     }
 
     private static void AdvancedFastJumpsStayDirect()
@@ -390,22 +417,82 @@ internal static class Program
         True(8f - output.X <= 0.012f, $"Advanced fast jump lagged by {8f - output.X} mm.");
     }
 
-    private static void AdvancedFastLateralShakeIsReduced()
+    private static void FastAimStabilityUsesSingleBoundedStage()
     {
-        var engine = new AdvancedAimEngine();
-        engine.Reset(Vector2.Zero);
-        float rawEnergy = 0f;
-        float outputEnergy = 0f;
+        var baseline = new BrakeDeadzoneFilter
+        {
+            MovementAntichatter = 10f,
+            BrakeSmoothing = 0f,
+            AdvancedFeatures = true,
+            StabilityRadius = 0f,
+            StopAssist = 0f,
+            FastAimStability = 0f,
+            FastAimThreshold = 40f
+        };
+        var stabilized = new BrakeDeadzoneFilter
+        {
+            MovementAntichatter = 10f,
+            BrakeSmoothing = 0f,
+            AdvancedFeatures = true,
+            StabilityRadius = 0f,
+            StopAssist = 0f,
+            FastAimStability = 1f,
+            FastAimThreshold = 40f
+        };
+
+        baseline.Consume(Report(0f, 0f));
+        stabilized.Consume(Report(0f, 0f));
+        float baselineEnergy = 0f;
+        float stabilizedEnergy = 0f;
         for (int index = 1; index <= 100; index++)
         {
-            float y = (index & 1) == 0 ? 0.055f : -0.055f;
-            Vector2 output = engine.Process(new Vector2(index * 1.2f, y), 0.005f);
-            rawEnergy += MathF.Abs(y);
-            outputEnergy += MathF.Abs(output.Y);
+            float y = (index & 1) == 0 ? 15f : -15f;
+            Vector2 raw = new(index * 100f, y);
+            FakeTabletReport baselineReport = Report(raw.X, raw.Y);
+            FakeTabletReport stabilizedReport = Report(raw.X, raw.Y);
+            baseline.Consume(baselineReport);
+            stabilized.Consume(stabilizedReport);
+            baselineEnergy += MathF.Abs(baselineReport.Position.Y);
+            stabilizedEnergy += MathF.Abs(stabilizedReport.Position.Y);
+            True(Vector2.Distance(stabilizedReport.Position, raw) <= 10.001f,
+                "Fast Aim Stability escaped the normal Movement Anti-Chatter leash.");
         }
 
-        True(outputEnergy < rawEnergy * 0.45f,
-            $"Advanced lateral stability was too weak: raw={rawEnergy}, output={outputEnergy}.");
+        True(stabilizedEnergy < baselineEnergy,
+            $"Fast Aim Stability did not reduce lateral energy: {stabilizedEnergy} vs {baselineEnergy}.");
+    }
+
+    private static void ZeroAdvancedSettingsAreTransparent()
+    {
+        var basic = new BrakeDeadzoneFilter();
+        var advancedZero = new BrakeDeadzoneFilter
+        {
+            AdvancedFeatures = true,
+            StabilityRadius = 0f,
+            StopAssist = 0f,
+            FastAimStability = 0f
+        };
+
+        for (int index = 0; index < 200; index++)
+        {
+            Vector2 raw = new(index * 17f, (index % 7) * 3f);
+            FakeTabletReport basicReport = Report(raw.X, raw.Y);
+            FakeTabletReport advancedReport = Report(raw.X, raw.Y);
+            basic.Consume(basicReport);
+            advancedZero.Consume(advancedReport);
+            Equal(basicReport.Position, advancedReport.Position, 0.0001f);
+        }
+    }
+
+    private static void StopAssistIsConstantSpeedTransparent()
+    {
+        var assisted = new AdvancedAimEngine { StabilityRadius = 0f, StopAssist = 0.50f };
+        assisted.Reset(Vector2.Zero);
+        for (int index = 1; index <= 200; index++)
+        {
+            Vector2 input = new(index, 0f);
+            Equal(input, assisted.Process(input, 0.005f), 0.000001f);
+        }
     }
 
     private static void AdvancedStopAssistReacts()
