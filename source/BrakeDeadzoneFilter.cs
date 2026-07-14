@@ -18,11 +18,13 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
     private const float DefaultMovementAntichatter = 10f;
     private const float DefaultBrakeSmoothing = 0.45f;
     private const float DefaultBrakeSpeed = 90f;
+    private const float DefaultFastAimStability = 0.80f;
 
     private const float MaximumMovementAntichatter = 100f;
     private const float MaximumBrakeSmoothing = 0.95f;
     private const float MinimumBrakeSpeed = 1f;
     private const float MaximumBrakeSpeed = 1000f;
+    private const float MaximumFastAimStability = 1f;
 
     private const float ResetDistance = 5000f;
     private const float ResetDistanceSquared = ResetDistance * ResetDistance;
@@ -30,6 +32,9 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
     private const float DirectionSmoothing = 0.35f;
     private const float SpeedSmoothing = 0.35f;
     private const float FullBrakeSpeedRatio = 0.35f;
+    private const float MinimumAdvancedDeltaTime = 0.00025f;
+    private const float MaximumAdvancedDeltaTime = 0.020f;
+    private const float AdvancedResetTime = 0.050f;
 
     private bool _initialized;
     private readonly AdvancedAimEngine _advancedEngine = new();
@@ -45,6 +50,7 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
     private float _movementAntichatter = DefaultMovementAntichatter;
     private float _brakeSmoothing = DefaultBrakeSmoothing;
     private float _brakeSpeed = DefaultBrakeSpeed;
+    private float _fastAimStability = DefaultFastAimStability;
 
     public PipelinePosition Position => PipelinePosition.PreTransform;
 
@@ -134,8 +140,9 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
     [DefaultPropertyValue(AdvancedAimEngine.DefaultStabilityRadius)]
     [Unit("mm")]
     [ToolTip(
-        "ADVANCED FEATURES MUST BE ON. Physical endpoint hold radius.\n" +
-        "Increase it for steadier stops; decrease it if tiny corrections feel sticky. Values above 0.10 mm are aggressive.")]
+        "ADVANCED FEATURES MUST BE ON. Endpoint hold radius used only after the pen is detected as stationary.\n" +
+        "It does not smooth continuous movement and does not duplicate Movement Anti-Chatter.\n" +
+        "Increase it for steadier settled stops; decrease it if the endpoint hold releases too late.")]
     public float StabilityRadius
     {
         get => _advancedEngine.StabilityRadius;
@@ -154,23 +161,29 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
         set => _advancedEngine.StopAssist = value;
     }
 
-    [SliderProperty("Advanced - Fast Aim Stability (default: 0.80)", 0f, AdvancedAimEngine.MaximumFastAimStability, AdvancedAimEngine.DefaultFastAimStability)]
-    [DefaultPropertyValue(AdvancedAimEngine.DefaultFastAimStability)]
+    [SliderProperty("Advanced - Fast Aim Stability (default: 0.80)", 0f, MaximumFastAimStability, DefaultFastAimStability)]
+    [DefaultPropertyValue(DefaultFastAimStability)]
     [Unit("ratio")]
     [ToolTip(
-        "ADVANCED FEATURES MUST BE ON. Controls sideways stability during fast jumps while preserving forward movement.\n" +
-        "Decrease it if curved movement feels constrained; increase it if jump lines shake sideways.")]
+        "ADVANCED FEATURES MUST BE ON. Adds speed-scaled sideways strength inside the existing Movement Anti-Chatter stage.\n" +
+        "It is not a second smoothing pass and cannot increase the normal stage's maximum positional offset.\n" +
+        "Decrease it if curves feel constrained; increase it if fast jump lines shake sideways.")]
     public float FastAimStability
     {
-        get => _advancedEngine.FastAimStability;
-        set => _advancedEngine.FastAimStability = value;
+        get => _fastAimStability;
+        set => _fastAimStability = ClampFinite(
+            value,
+            minimum: 0f,
+            maximum: MaximumFastAimStability,
+            fallback: DefaultFastAimStability);
     }
 
     [SliderProperty("Advanced - Fast Aim Threshold (default: 120)", AdvancedAimEngine.MinimumFastAimThreshold, AdvancedAimEngine.MaximumFastAimThreshold, AdvancedAimEngine.DefaultFastAimThreshold)]
     [DefaultPropertyValue(AdvancedAimEngine.DefaultFastAimThreshold)]
     [Unit("mm/s")]
     [ToolTip(
-        "ADVANCED FEATURES MUST BE ON. Speed at which forward movement becomes almost raw.\n" +
+        "ADVANCED FEATURES MUST BE ON. Speed where additional fast lateral stability reaches full strength.\n" +
+        "It also calibrates which speed drops count as an approach for Stop Assist.\n" +
         "Lower it for a snappier response; raise it for more stability at medium speed.")]
     public float FastAimThreshold
     {
@@ -246,9 +259,10 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
         }
 
         float speed = MathF.Sqrt(distanceSquared);
+        float advancedDeltaTime = GetAdvancedDeltaTime(rawDelta, out float physicalSpeed);
         UpdateMovementDirection(rawDelta, speed);
 
-        Vector2 antichatterDelta = ApplyMovementAntichatter(rawDelta, speed);
+        Vector2 antichatterDelta = ApplyMovementAntichatter(rawDelta, speed, physicalSpeed);
         Vector2 antichatterTarget = _antichatterPosition + antichatterDelta;
         antichatterTarget = LimitOffsetFromRaw(
             antichatterTarget,
@@ -280,7 +294,7 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
             _antichatterPosition = antichatterTarget;
         }
 
-        tabletReport.Position = ApplyAdvanced(outputPosition);
+        tabletReport.Position = ApplyAdvanced(outputPosition, advancedDeltaTime);
         Emit?.Invoke(report);
     }
 
@@ -311,25 +325,14 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
         _initialized = true;
     }
 
-    private Vector2 ApplyAdvanced(Vector2 basicPosition)
+    private Vector2 ApplyAdvanced(Vector2 basicPosition, float deltaTime)
     {
         if (!AdvancedFeatures)
         {
             return basicPosition;
         }
 
-        long timestamp = Stopwatch.GetTimestamp();
         Vector2 millimetrePosition = basicPosition * _millimetresPerUnit;
-        if (!_advancedHasTimestamp)
-        {
-            _advancedEngine.Reset(millimetrePosition);
-            _advancedLastTimestamp = timestamp;
-            _advancedHasTimestamp = true;
-            return basicPosition;
-        }
-
-        float deltaTime = (float)((timestamp - _advancedLastTimestamp) / (double)Stopwatch.Frequency);
-        _advancedLastTimestamp = timestamp;
         Vector2 advancedPosition = _advancedEngine.Process(millimetrePosition, deltaTime);
         if (!IsFinite(advancedPosition))
         {
@@ -338,6 +341,43 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
         }
 
         return advancedPosition / _millimetresPerUnit;
+    }
+
+    private float GetAdvancedDeltaTime(Vector2 rawDelta, out float physicalSpeed)
+    {
+        physicalSpeed = 0f;
+        if (!AdvancedFeatures)
+        {
+            return 0f;
+        }
+
+        long timestamp = Stopwatch.GetTimestamp();
+        if (!_advancedHasTimestamp)
+        {
+            _advancedLastTimestamp = timestamp;
+            _advancedHasTimestamp = true;
+            return 0f;
+        }
+
+        float deltaTime = (float)((timestamp - _advancedLastTimestamp) / (double)Stopwatch.Frequency);
+        _advancedLastTimestamp = timestamp;
+        if (!float.IsFinite(deltaTime) || deltaTime <= 0f || deltaTime > AdvancedResetTime)
+        {
+            return deltaTime;
+        }
+
+        Vector2 physicalDelta = rawDelta * _millimetresPerUnit;
+        float distanceSquared = physicalDelta.LengthSquared();
+        if (float.IsFinite(distanceSquared))
+        {
+            float speedTime = Math.Clamp(
+                deltaTime,
+                MinimumAdvancedDeltaTime,
+                MaximumAdvancedDeltaTime);
+            physicalSpeed = MathF.Sqrt(distanceSquared) / speedTime;
+        }
+
+        return deltaTime;
     }
 
     private void ResetAdvanced(Vector2 rawPosition)
@@ -390,7 +430,10 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
         }
     }
 
-    private Vector2 ApplyMovementAntichatter(Vector2 rawDelta, float speed)
+    private Vector2 ApplyMovementAntichatter(
+        Vector2 rawDelta,
+        float speed,
+        float physicalSpeed)
     {
         float deadzone = MovementAntichatter;
         if (deadzone <= 0f || speed <= 0f)
@@ -413,8 +456,15 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
         float forwardDistance = Vector2.Dot(rawDelta, _movementDirection);
         Vector2 forwardMovement = _movementDirection * forwardDistance;
         Vector2 sidewaysMovement = rawDelta - forwardMovement;
+        float fastBlend = AdvancedFeatures
+            ? SmoothStep(
+                physicalSpeed,
+                FastAimThreshold * 0.50f,
+                FastAimThreshold)
+            : 0f;
+        float lateralDeadzone = deadzone * (1f + FastAimStability * fastBlend);
 
-        return forwardMovement + ApplyVectorDeadzone(sidewaysMovement, deadzone);
+        return forwardMovement + ApplyVectorDeadzone(sidewaysMovement, lateralDeadzone);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
