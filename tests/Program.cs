@@ -15,8 +15,9 @@ internal static class Program
     private static int Main()
     {
         Run("Documented defaults are real object defaults", DefaultsAreInitialized);
-        Run("Assembly and plugin identify as v0.1", VersionMetadataIsV01);
+        Run("Assembly is v0.2 and OTD name has no version", VersionMetadataIsV02);
         Run("Setting labels expose defaults and units", SettingMetadataIsVisible);
+        Run("Advanced features are off by default and visibly gated", AdvancedMetadataIsGated);
         Run("First tablet report passes through unchanged", FirstReportPassesThrough);
         Run("Tiny jitter is held but cannot drift beyond the deadzone", TinyJitterIsBounded);
         Run("Slow braking stays bounded instead of accumulating lag", SlowBrakeDoesNotAccumulateLag);
@@ -27,12 +28,24 @@ internal static class Program
         Run("Invalid settings cannot poison the filter", InvalidSettingsAreSanitized);
         Run("Invalid positions reset state before the next valid report", InvalidPositionResetsState);
         Run("Anti-chatter no longer depends on Brake Start Speed", AntichatterIsIndependentFromBrakeSpeed);
+        Run("Disabled advanced settings cannot change basic output", DisabledAdvancedSettingsAreTransparent);
+        Run("Enabling advanced features starts without a position jump", EnablingAdvancedStartsCleanly);
+        Run("Incomplete OTD tablet references fall back safely", IncompleteTabletReferenceIsSafe);
+        Run("Advanced stationary chatter is held", AdvancedStationaryChatterIsHeld);
+        Run("Advanced fast jumps stay direct", AdvancedFastJumpsStayDirect);
+        Run("Advanced fast lateral shake is reduced", AdvancedFastLateralShakeIsReduced);
+        Run("Advanced stop assist reacts to endpoint deceleration", AdvancedStopAssistReacts);
+        Run("Advanced endpoint hold releases on new intent", AdvancedHoldReleases);
+        Run("Advanced output remains spatially bounded", AdvancedOutputIsLeashed);
+        Run("Advanced report-rate changes stay consistent", AdvancedReportRatesStayConsistent);
+        Run("Advanced hot path performs no managed allocations", AdvancedHotPathDoesNotAllocate);
+        Run("Integrated advanced plugin path performs no managed allocations", AdvancedPluginHotPathDoesNotAllocate);
         Run("Finite randomized input never produces invalid output", RandomizedInputStaysFinite);
         Run("The report hot path performs no managed allocations", HotPathDoesNotAllocate);
 
         if (Failures.Count == 0)
         {
-            Console.WriteLine("All 15 tests passed.");
+            Console.WriteLine("All 28 tests passed.");
             PrintHotPathBenchmark();
             return 0;
         }
@@ -66,19 +79,24 @@ internal static class Program
         Equal(10f, filter.MovementAntichatter);
         Equal(0.45f, filter.BrakeSmoothing);
         Equal(90f, filter.BrakeSpeed);
+        True(!filter.AdvancedFeatures, "Advanced features must default to off.");
+        Equal(0.05f, filter.StabilityRadius);
+        Equal(0.25f, filter.StopAssist);
+        Equal(0.80f, filter.FastAimStability);
+        Equal(120f, filter.FastAimThreshold);
     }
 
-    private static void VersionMetadataIsV01()
+    private static void VersionMetadataIsV02()
     {
         Version? version = typeof(BrakeDeadzoneFilter).Assembly.GetName().Version;
-        True(version == new Version(0, 1, 0, 0), $"Unexpected assembly version: {version}");
+        True(version == new Version(0, 2, 0, 0), $"Unexpected assembly version: {version}");
 
         PluginNameAttribute? name = typeof(BrakeDeadzoneFilter)
             .GetCustomAttributes(typeof(PluginNameAttribute), inherit: false)
             .Cast<PluginNameAttribute>()
             .SingleOrDefault();
         True(name is not null, "PluginNameAttribute is missing.");
-        True(name!.Name == "Brake Filter v0.1", $"Unexpected plugin name: {name.Name}");
+        True(name!.Name == "Brake Filter", $"Unexpected plugin name: {name.Name}");
     }
 
     private static void SettingMetadataIsVisible()
@@ -98,6 +116,40 @@ internal static class Program
             expectedLabelText: "default: 90",
             expectedDefault: 90f,
             expectedUnit: "raw units/report");
+    }
+
+    private static void AdvancedMetadataIsGated()
+    {
+        PropertyInfo toggle = typeof(BrakeDeadzoneFilter).GetProperty(nameof(BrakeDeadzoneFilter.AdvancedFeatures))
+            ?? throw new InvalidOperationException("AdvancedFeatures is missing.");
+        BooleanPropertyAttribute boolean = toggle.GetCustomAttribute<BooleanPropertyAttribute>()
+            ?? throw new InvalidOperationException("AdvancedFeatures is not a visible boolean setting.");
+        DefaultPropertyValueAttribute defaultValue = toggle.GetCustomAttribute<DefaultPropertyValueAttribute>()
+            ?? throw new InvalidOperationException("AdvancedFeatures has no serialized default.");
+        True(boolean.DisplayName.Contains("default: off", StringComparison.OrdinalIgnoreCase),
+            "The advanced toggle does not visibly show its default.");
+        True(defaultValue.Value is false, "AdvancedFeatures does not serialize as off by default.");
+
+        string[] advancedSettings =
+        {
+            nameof(BrakeDeadzoneFilter.StabilityRadius),
+            nameof(BrakeDeadzoneFilter.StopAssist),
+            nameof(BrakeDeadzoneFilter.FastAimStability),
+            nameof(BrakeDeadzoneFilter.FastAimThreshold)
+        };
+        foreach (string setting in advancedSettings)
+        {
+            PropertyInfo property = typeof(BrakeDeadzoneFilter).GetProperty(setting)
+                ?? throw new InvalidOperationException($"Missing advanced setting: {setting}");
+            SliderPropertyAttribute slider = property.GetCustomAttribute<SliderPropertyAttribute>()
+                ?? throw new InvalidOperationException($"{setting} is not a slider.");
+            ToolTipAttribute tooltip = property.GetCustomAttribute<ToolTipAttribute>()
+                ?? throw new InvalidOperationException($"{setting} has no tooltip.");
+            True(slider.DisplayName.StartsWith("Advanced -", StringComparison.Ordinal),
+                $"{setting} is not visibly marked as advanced.");
+            True(tooltip.ToolTip.Contains("MUST BE ON", StringComparison.Ordinal),
+                $"{setting} does not explain its gate.");
+        }
     }
 
     private static void FirstReportPassesThrough()
@@ -257,6 +309,210 @@ internal static class Program
         True(diagonal.Position.Y < 3f, $"Sideways jitter was not reduced: Y={diagonal.Position.Y}");
     }
 
+    private static void DisabledAdvancedSettingsAreTransparent()
+    {
+        var baseline = new BrakeDeadzoneFilter();
+        var changed = new BrakeDeadzoneFilter
+        {
+            AdvancedFeatures = false,
+            StabilityRadius = 0.20f,
+            StopAssist = 0.50f,
+            FastAimStability = 1f,
+            FastAimThreshold = 40f
+        };
+
+        Vector2[] points =
+        {
+            Vector2.Zero,
+            new(5f, 2f),
+            new(100f, 3f),
+            new(111f, 3.5f),
+            new(111.5f, 3.3f),
+            new(-200f, 50f)
+        };
+        foreach (Vector2 point in points)
+        {
+            FakeTabletReport baselineReport = Report(point.X, point.Y);
+            FakeTabletReport changedReport = Report(point.X, point.Y);
+            baseline.Consume(baselineReport);
+            changed.Consume(changedReport);
+            Equal(baselineReport.Position, changedReport.Position);
+        }
+    }
+
+    private static void EnablingAdvancedStartsCleanly()
+    {
+        var filter = new BrakeDeadzoneFilter
+        {
+            MovementAntichatter = 0f,
+            BrakeSmoothing = 0f
+        };
+        filter.Consume(Report(0f, 0f));
+        filter.AdvancedFeatures = true;
+
+        FakeTabletReport firstAdvancedReport = Report(100f, 25f);
+        filter.Consume(firstAdvancedReport);
+        Equal(new Vector2(100f, 25f), firstAdvancedReport.Position);
+    }
+
+    private static void IncompleteTabletReferenceIsSafe()
+    {
+        var filter = new BrakeDeadzoneFilter { AdvancedFeatures = true };
+        TabletReference incomplete = Activator.CreateInstance<TabletReference>();
+        filter.TabletReference = incomplete;
+
+        FakeTabletReport first = Report(123f, 456f);
+        filter.Consume(first);
+        Equal(new Vector2(123f, 456f), first.Position);
+    }
+
+    private static void AdvancedStationaryChatterIsHeld()
+    {
+        var engine = new AdvancedAimEngine();
+        engine.Reset(Vector2.Zero);
+        Vector2 output = Vector2.Zero;
+        for (int index = 0; index < 200; index++)
+        {
+            float x = (index & 1) == 0 ? 0.035f : -0.035f;
+            float y = (index % 3 - 1) * 0.012f;
+            output = engine.Process(new Vector2(x, y), 0.005f);
+        }
+
+        True(output.Length() < 0.005f, $"Advanced chatter escaped to {output}.");
+        True(engine.IsSettled, "Advanced endpoint hold never settled.");
+    }
+
+    private static void AdvancedFastJumpsStayDirect()
+    {
+        var engine = new AdvancedAimEngine();
+        engine.Reset(Vector2.Zero);
+        Vector2 output = engine.Process(new Vector2(8f, 0f), 0.005f);
+        True(8f - output.X <= 0.012f, $"Advanced fast jump lagged by {8f - output.X} mm.");
+    }
+
+    private static void AdvancedFastLateralShakeIsReduced()
+    {
+        var engine = new AdvancedAimEngine();
+        engine.Reset(Vector2.Zero);
+        float rawEnergy = 0f;
+        float outputEnergy = 0f;
+        for (int index = 1; index <= 100; index++)
+        {
+            float y = (index & 1) == 0 ? 0.055f : -0.055f;
+            Vector2 output = engine.Process(new Vector2(index * 1.2f, y), 0.005f);
+            rawEnergy += MathF.Abs(y);
+            outputEnergy += MathF.Abs(output.Y);
+        }
+
+        True(outputEnergy < rawEnergy * 0.45f,
+            $"Advanced lateral stability was too weak: raw={rawEnergy}, output={outputEnergy}.");
+    }
+
+    private static void AdvancedStopAssistReacts()
+    {
+        var assisted = new AdvancedAimEngine { StopAssist = 0.50f };
+        var unassisted = new AdvancedAimEngine { StopAssist = 0f };
+        assisted.Reset(Vector2.Zero);
+        unassisted.Reset(Vector2.Zero);
+        for (int index = 1; index <= 8; index++)
+        {
+            Vector2 raw = new(index, 0f);
+            assisted.Process(raw, 0.005f);
+            unassisted.Process(raw, 0.005f);
+        }
+
+        Vector2 endpoint = new(8.15f, 0f);
+        Vector2 assistedOutput = assisted.Process(endpoint, 0.005f);
+        Vector2 unassistedOutput = unassisted.Process(endpoint, 0.005f);
+        True(assistedOutput.X < unassistedOutput.X - 0.003f,
+            $"Stop Assist did not add endpoint braking: {assistedOutput.X} vs {unassistedOutput.X}.");
+    }
+
+    private static void AdvancedHoldReleases()
+    {
+        var engine = new AdvancedAimEngine();
+        engine.Reset(Vector2.Zero);
+        for (int index = 0; index < 5; index++)
+        {
+            engine.Process(Vector2.Zero, 0.005f);
+        }
+
+        True(engine.IsSettled, "Advanced endpoint hold did not settle.");
+        Equal(Vector2.Zero, engine.Process(new Vector2(0.04f, 0f), 0.005f), 0.001f);
+        Vector2 jump = engine.Process(new Vector2(4f, 0f), 0.005f);
+        True(jump.X > 3.98f, $"Advanced hold did not release on new intent: {jump.X}.");
+    }
+
+    private static void AdvancedOutputIsLeashed()
+    {
+        var engine = new AdvancedAimEngine();
+        engine.Reset(Vector2.Zero);
+        uint state = 0x51ED270Bu;
+        Vector2 raw = Vector2.Zero;
+        for (int index = 0; index < 100_000; index++)
+        {
+            raw += new Vector2(NextSigned(ref state), NextSigned(ref state)) * 0.13f;
+            Vector2 output = engine.Process(raw, 0.001f + (index % 9) * 0.001f);
+            True(Vector2.Distance(output, raw) <= 0.1001f,
+                $"Advanced leash escaped at report {index}.");
+        }
+    }
+
+    private static void AdvancedReportRatesStayConsistent()
+    {
+        foreach (float rate in new[] { 125f, 200f, 500f, 1000f })
+        {
+            var engine = new AdvancedAimEngine();
+            engine.Reset(Vector2.Zero);
+            Vector2 output = Vector2.Zero;
+            for (int index = 1; index <= (int)rate; index++)
+            {
+                output = engine.Process(new Vector2(100f * index / rate, 0f), 1f / rate);
+            }
+
+            True(MathF.Abs(100f - output.X) <= 0.07f,
+                $"Advanced output at {rate} Hz ended at {output.X} mm.");
+        }
+    }
+
+    private static void AdvancedHotPathDoesNotAllocate()
+    {
+        var engine = new AdvancedAimEngine();
+        engine.Reset(Vector2.Zero);
+        for (int index = 0; index < 10_000; index++)
+        {
+            engine.Process(new Vector2(index * 0.1f, index % 5 * 0.01f), 0.005f);
+        }
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int index = 0; index < 100_000; index++)
+        {
+            engine.Process(new Vector2(index * 0.1f, index % 5 * 0.01f), 0.005f);
+        }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        True(allocated == 0, $"Advanced path allocated {allocated} bytes.");
+    }
+
+    private static void AdvancedPluginHotPathDoesNotAllocate()
+    {
+        var filter = new BrakeDeadzoneFilter { AdvancedFeatures = true };
+        FakeTabletReport report = Report(0f, 0f);
+        for (int index = 0; index < 10_000; index++)
+        {
+            report.Position = new Vector2(index * 2f, index % 7);
+            filter.Consume(report);
+        }
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int index = 0; index < 100_000; index++)
+        {
+            report.Position = new Vector2(index * 2f, index % 7);
+            filter.Consume(report);
+        }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        True(allocated == 0, $"Integrated advanced plugin path allocated {allocated} bytes.");
+    }
+
     private static void RandomizedInputStaysFinite()
     {
         var filter = new BrakeDeadzoneFilter
@@ -340,7 +596,30 @@ internal static class Program
 
         stopwatch.Stop();
         double nanosecondsPerReport = stopwatch.Elapsed.TotalNanoseconds / measuredReports;
-        Console.WriteLine($"Hot-path benchmark: {nanosecondsPerReport:F1} ns/report, 0 B/report.");
+        Console.WriteLine($"Basic hot-path benchmark: {nanosecondsPerReport:F1} ns/report, 0 B/report.");
+
+        var advancedFilter = new BrakeDeadzoneFilter
+        {
+            MovementAntichatter = 22f,
+            BrakeSmoothing = 0.35f,
+            BrakeSpeed = 75f,
+            AdvancedFeatures = true
+        };
+        for (int index = 0; index < warmupReports; index++)
+        {
+            report.Position = new Vector2(index * 3f, index % 11);
+            advancedFilter.Consume(report);
+        }
+
+        stopwatch.Restart();
+        for (int index = 0; index < measuredReports; index++)
+        {
+            report.Position = new Vector2(index * 3f, index % 11);
+            advancedFilter.Consume(report);
+        }
+        stopwatch.Stop();
+        nanosecondsPerReport = stopwatch.Elapsed.TotalNanoseconds / measuredReports;
+        Console.WriteLine($"Advanced hot-path benchmark: {nanosecondsPerReport:F1} ns/report, 0 B/report.");
     }
 
     private static BrakeDeadzoneFilter CreateFilter(out List<IDeviceReport> emitted)
@@ -381,6 +660,14 @@ internal static class Program
             Raw = Array.Empty<byte>(),
             PenButtons = Array.Empty<bool>()
         };
+    }
+
+    private static float NextSigned(ref uint state)
+    {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        return ((state & 0xFFFF) / 32767.5f) - 1f;
     }
 
     private static void Equal(float expected, float actual, float tolerance = 0.0001f)
