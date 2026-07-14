@@ -21,7 +21,7 @@ public sealed partial class AdvancedAimEngine
         Vector2 input,
         float reportDistance,
         float speed,
-        float deltaTime,
+        float reportPeriod,
         float previousPeak,
         float holdRadius)
     {
@@ -65,7 +65,7 @@ public sealed partial class AdvancedAimEngine
             return false;
         }
 
-        _stationarySeconds += deltaTime;
+        _stationarySeconds += reportPeriod;
         _stationarySamples++;
         _stationaryPath += reportDistance;
 

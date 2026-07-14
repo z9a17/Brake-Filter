@@ -70,7 +70,7 @@ public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDe
         }
 
         float speed = MathF.Sqrt(distanceSquared);
-        float deltaTime = MeasureAdvancedSpeed(rawDelta, out float physicalSpeed);
+        float reportPeriod = MeasureAdvancedMotion(rawDelta, out float physicalSpeed);
         Vector2 antichatterTarget = ApplyMovementFilter(rawPosition, rawDelta, speed, physicalSpeed);
 
         _smoothedSpeed = AimMath.Lerp(_smoothedSpeed, speed, SpeedSmoothing);
@@ -92,7 +92,7 @@ public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDe
             _antichatterPosition = antichatterTarget;
         }
 
-        tabletReport.Position = ApplyAdvanced(output, deltaTime);
+        tabletReport.Position = ApplyAdvanced(output, reportPeriod);
         Emit?.Invoke(report);
     }
 

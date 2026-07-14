@@ -19,6 +19,7 @@ internal static class Program
         Run("Movement anti-chatter remains directional and spatially bounded", MovementFilterIsBounded);
         Run("Braking is bounded and fast movement stays direct", BrakingIsBounded);
         Run("PTK-1240-scale reports use the expanded speed range", Ptk1240ScaleReportsWork);
+        Run("Rolling report period resists USB bursts and host pauses", ReportPeriodIsStable);
         Run("Advanced gate is transparent when disabled or zeroed", AdvancedGateIsTransparent);
         Run("Endpoint hold is stationary-only and releases on intent", EndpointHoldBehaves);
         Run("Stop Assist reacts without escaping its leash", StopAssistIsBounded);
@@ -36,7 +37,7 @@ internal static class Program
             return 1;
         }
 
-        Console.WriteLine("All 11 core tests passed.");
+        Console.WriteLine("All 12 core tests passed.");
         PrintBenchmarks();
         return 0;
     }
@@ -54,7 +55,7 @@ internal static class Program
         Equal(120f, filter.FastAimThreshold);
 
         Version? version = typeof(BrakeDeadzoneFilter).Assembly.GetName().Version;
-        True(version == new Version(0, 2, 3, 0), $"Unexpected assembly version: {version}");
+        True(version == new Version(0, 2, 4, 0), $"Unexpected assembly version: {version}");
         True(typeof(BrakeDeadzoneFilter).FullName == "BrakeFilter.BrakeDeadzoneFilter",
             "The saved-profile type identity changed.");
         PluginNameAttribute? name = typeof(BrakeDeadzoneFilter)
@@ -196,6 +197,39 @@ internal static class Program
         FakeTabletReport second = Report(4002f, 0f);
         filter.Consume(second);
         Equal(new Vector2(2001f, 0f), second.Position);
+    }
+
+    private static void ReportPeriodIsStable()
+    {
+        var estimator = new ReportPeriodEstimator();
+        Equal(0.005f, estimator.PeriodSeconds, 0.000001f);
+
+        for (int index = 0; index < 32; index++)
+        {
+            estimator.Observe(0.005f);
+        }
+        Equal(0.005f, estimator.PeriodSeconds, 0.000001f);
+
+        // Two reports delivered as a short/long pair still represent 5 ms each.
+        for (int index = 0; index < 32; index++)
+        {
+            estimator.Observe((index & 1) == 0 ? 0.001f : 0.009f);
+        }
+        Equal(0.005f, estimator.PeriodSeconds, 0.000001f);
+
+        // A scheduler pause is not a tablet report-period change.
+        estimator.Observe(0.040f);
+        Equal(0.005f, estimator.PeriodSeconds, 0.000001f);
+
+        // A real rate change converges after one small window.
+        for (int index = 0; index < 32; index++)
+        {
+            estimator.Observe(0.001f);
+        }
+        Equal(0.001f, estimator.PeriodSeconds, 0.000001f);
+
+        estimator.Clear();
+        Equal(0.005f, estimator.PeriodSeconds, 0.000001f);
     }
 
     private static void AdvancedGateIsTransparent()

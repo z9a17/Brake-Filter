@@ -24,7 +24,7 @@ public sealed partial class AdvancedAimEngine
     public Vector2 Output => _output;
     public bool IsSettled => _settled;
 
-    public Vector2 Process(Vector2 input, float deltaTimeSeconds)
+    public Vector2 Process(Vector2 input, float reportPeriodSeconds)
     {
         if (!AimMath.IsFinite(input))
         {
@@ -33,14 +33,14 @@ public sealed partial class AdvancedAimEngine
         }
 
         if (!_initialized ||
-            !float.IsFinite(deltaTimeSeconds) ||
-            deltaTimeSeconds <= 0f ||
-            deltaTimeSeconds > ResetTime)
+            !float.IsFinite(reportPeriodSeconds) ||
+            reportPeriodSeconds <= 0f ||
+            reportPeriodSeconds > ResetTime)
         {
             return Reset(input);
         }
 
-        float deltaTime = Math.Clamp(deltaTimeSeconds, MinimumDeltaTime, MaximumDeltaTime);
+        float reportPeriod = Math.Clamp(reportPeriodSeconds, MinimumDeltaTime, MaximumDeltaTime);
         Vector2 inputDelta = input - _previousInput;
         float distanceSquared = inputDelta.LengthSquared();
         if (!float.IsFinite(distanceSquared))
@@ -49,9 +49,9 @@ public sealed partial class AdvancedAimEngine
         }
 
         float distance = MathF.Sqrt(distanceSquared);
-        float speed = distance / deltaTime;
+        float speed = distance / reportPeriod;
         float previousPeak = _peakSpeed;
-        _peakSpeed = MathF.Max(speed, previousPeak * MathF.Exp(-deltaTime / PeakReleaseSeconds));
+        _peakSpeed = MathF.Max(speed, previousPeak * MathF.Exp(-reportPeriod / PeakReleaseSeconds));
 
         float holdRadius = StabilityRadius * 1.33f;
         if (TryHoldSettledPosition(input, holdRadius, out Vector2 heldPosition))
@@ -59,7 +59,7 @@ public sealed partial class AdvancedAimEngine
             return heldPosition;
         }
 
-        if (UpdateStationaryCandidate(input, distance, speed, deltaTime, previousPeak, holdRadius))
+        if (UpdateStationaryCandidate(input, distance, speed, reportPeriod, previousPeak, holdRadius))
         {
             return SettleAt(input);
         }
