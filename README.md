@@ -1,4 +1,4 @@
-# Brake Filter v0.2.2
+# Brake Filter v0.2.3
 
 Brake Filter is a low-latency OpenTabletDriver 0.6.7 pre-transform filter. It combines the Consistent Aim movement anti-chatter and bounded slow-movement braking with optional advanced endpoint and fast-aim stability.
 
@@ -17,7 +17,7 @@ The plugin is displayed simply as `Brake Filter` inside OpenTabletDriver. Versio
 | Brake Strength | 0.45 | 0.00-1.00 | Steadies slow movement near a stop. Zero disables it. |
 | Brake Start Speed | 90 | 1-10000 raw units/report | Braking fades in below this speed and is off at or above it. |
 
-These settings always work, even when Advanced Features is off. The suggested starting ranges in the tooltips target a Wacom PTH-660 at 200 Hz. Other tablets and report rates may need different values. The higher v0.2.2 ceilings allow high-resolution, full-area tablets such as the PTK-1240 to tune around reports above 2000 raw units without hitting the old slider limit. PTK-1240-scale input is covered by automated tests, but has not been tested here on PTK-1240 hardware.
+These settings always work, even when Advanced Features is off. The suggested starting ranges in the tooltips target a Wacom PTH-660 at 200 Hz. Other tablets and report rates may need different values. The higher ceilings allow high-resolution, full-area tablets such as the PTK-1240 to tune around reports above 2000 raw units. PTK-1240-scale input is covered by automated tests, but has not been tested here on PTK-1240 hardware.
 
 ## Advanced settings
 
@@ -48,14 +48,14 @@ From PowerShell in this directory:
 .\build.ps1
 ```
 
-The script restores dependencies from NuGet, builds the plugin, runs all 33 regression tests, and produces:
+The script restores dependencies from NuGet, builds the plugin, runs 11 focused core tests, and produces:
 
 - `release\BrakeFilter.dll`
-- `release\Brake-Filter-v0.2.2.zip`
+- `release\Brake-Filter-v0.2.3.zip`
 
 ## Install and set up
 
-1. Download `Brake-Filter-v0.2.2.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
+1. Download `Brake-Filter-v0.2.3.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
 2. Open OpenTabletDriver and make sure your tablet is detected.
 3. Open **Plugins > Open Plugin Manager**.
 4. In the Plugin Manager, choose **Install plugin...** and select the downloaded ZIP.
@@ -91,6 +91,16 @@ Use only this filter while tuning it. Stacking multiple smoothing or anti-chatte
 - State resets only on an explicit out-of-range report, not ordinary far-hover reports.
 - The impossible-jump guard sits above the full PTK-1240 coordinate diagonal, so valid high-resolution full-area reports do not reset filter state.
 - The report hot path is allocation-free under the included regression test.
+
+## Source layout
+
+- `BrakeDeadzoneFilter.cs` contains the report pipeline and state lifecycle.
+- `BrakeDeadzoneFilter.Settings.cs` contains the public OTD settings and tooltips.
+- `BrakeDeadzoneFilter.Movement.cs` contains directional anti-chatter and braking.
+- `BrakeDeadzoneFilter.Advanced.cs` connects tablet scaling and advanced processing.
+- `AdvancedAimEngine.cs` contains the advanced processing flow.
+- `AdvancedAimEngine.Endpoint.cs`, `.State.cs`, and `.Settings.cs` separate endpoint detection, state transitions, and configuration.
+- `AimMath.cs` contains the shared allocation-free numeric helpers.
 
 ## License
 
