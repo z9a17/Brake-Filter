@@ -2,8 +2,6 @@
 
 Brake Filter is a low-latency OpenTabletDriver 0.6.7 pre-transform filter. It combines directional movement anti-chatter with bounded, speed-sensitive braking near the end of pen movement.
 
-The filter only processes tablet reports. It does not read applications, screen contents, beatmaps, targets, clicks, or network data.
-
 ## Requirements
 
 - OpenTabletDriver 0.6.7
@@ -32,9 +30,24 @@ The script restores dependencies from NuGet, builds the plugin, runs all 15 regr
 - `release\BrakeFilter.dll`
 - `release\Brake-Filter-v0.1.zip`
 
-## Install
+## Install and set up
 
-Install `release\Brake-Filter-v0.1.zip` through OpenTabletDriver's plugin manager, restart OpenTabletDriver, and add `Brake Filter v0.1` as a filter. Do not stack it with another smoothing or anti-chatter filter until each filter has been tuned independently.
+1. Download `Brake-Filter-v0.1.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
+2. Open OpenTabletDriver and make sure your tablet is detected.
+3. Open **Plugins > Open Plugin Manager**.
+4. In the Plugin Manager, choose **Install plugin...** and select the downloaded ZIP.
+5. Restart OpenTabletDriver if `Brake Filter v0.1` does not appear immediately.
+6. Open the **Filters** tab, select `Brake Filter v0.1`, and check **Enable Brake Filter v0.1**.
+7. Start with the defaults: Movement Anti-Chatter `10`, Brake Strength `0.45`, and Brake Start Speed `90`.
+
+Use only this filter while tuning it. Stacking multiple smoothing or anti-chatter filters can add latency and make the result difficult to diagnose.
+
+## Quick tuning
+
+- Increase **Movement Anti-Chatter** in steps of 2 if movement still looks shaky. Decrease it if small corrections feel sticky.
+- Increase **Brake Strength** in steps of 0.05 if stopping still feels unstable. Decrease it if slow aim feels heavy.
+- Increase **Brake Start Speed** in steps of 10-20 if braking engages too late. Decrease it if medium-speed aim feels restrained.
+- Test one change at a time. Values depend on the tablet resolution and report rate.
 
 ## Design notes
 
