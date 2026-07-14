@@ -50,8 +50,59 @@ public sealed partial class AdvancedAimEngine
 
         float distance = MathF.Sqrt(distanceSquared);
         float speed = distance / reportPeriod;
+        return ProcessCore(input, reportPeriod, distance, speed, true);
+    }
+
+    internal Vector2 Process(
+        Vector2 input,
+        float reportPeriodSeconds,
+        float motionSpeed,
+        bool hasMotionSample)
+    {
+        if (!AimMath.IsFinite(input))
+        {
+            Clear();
+            return input;
+        }
+
+        if (!_initialized ||
+            !float.IsFinite(reportPeriodSeconds) ||
+            reportPeriodSeconds <= 0f ||
+            reportPeriodSeconds > ResetTime ||
+            !float.IsFinite(motionSpeed) ||
+            motionSpeed < 0f)
+        {
+            return Reset(input);
+        }
+
+        float reportPeriod = Math.Clamp(reportPeriodSeconds, MinimumDeltaTime, MaximumDeltaTime);
+        Vector2 inputDelta = input - _previousInput;
+        float distanceSquared = inputDelta.LengthSquared();
+        if (!float.IsFinite(distanceSquared))
+        {
+            return Reset(input);
+        }
+
+        return ProcessCore(
+            input,
+            reportPeriod,
+            MathF.Sqrt(distanceSquared),
+            motionSpeed,
+            hasMotionSample);
+    }
+
+    private Vector2 ProcessCore(
+        Vector2 input,
+        float reportPeriod,
+        float distance,
+        float speed,
+        bool hasMotionSample)
+    {
         float previousPeak = _peakSpeed;
-        _peakSpeed = MathF.Max(speed, previousPeak * MathF.Exp(-reportPeriod / PeakReleaseSeconds));
+        float decayedPeak = previousPeak * MathF.Exp(-reportPeriod / PeakReleaseSeconds);
+        _peakSpeed = hasMotionSample
+            ? MathF.Max(speed, decayedPeak)
+            : decayedPeak;
 
         float holdRadius = StabilityRadius * 1.33f;
         if (TryHoldSettledPosition(input, holdRadius, out Vector2 heldPosition))
@@ -59,12 +110,21 @@ public sealed partial class AdvancedAimEngine
             return heldPosition;
         }
 
-        if (UpdateStationaryCandidate(input, distance, speed, reportPeriod, previousPeak, holdRadius))
+        if (UpdateStationaryCandidate(
+            input,
+            distance,
+            speed,
+            reportPeriod,
+            previousPeak,
+            holdRadius,
+            hasMotionSample))
         {
             return SettleAt(input);
         }
 
-        float brakeAmount = CalculateStopAssist(speed, previousPeak);
+        float brakeAmount = hasMotionSample
+            ? CalculateStopAssist(speed, previousPeak)
+            : 0f;
         _output = brakeAmount > 0f
             ? Vector2.Lerp(input, _previousInput, brakeAmount)
             : input;

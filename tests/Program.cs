@@ -20,6 +20,8 @@ internal static class Program
         Run("Braking is bounded and fast movement stays direct", BrakingIsBounded);
         Run("PTK-1240-scale reports use the expanded speed range", Ptk1240ScaleReportsWork);
         Run("Rolling report period resists USB bursts and host pauses", ReportPeriodIsStable);
+        Run("Position sampling ignores host jitter and coordinate duplicates", PositionSamplingIsStable);
+        Run("Coordinate duplicates stay transparent", DuplicateReportsStayTransparent);
         Run("Advanced gate is transparent when disabled or zeroed", AdvancedGateIsTransparent);
         Run("Endpoint hold is stationary-only and releases on intent", EndpointHoldBehaves);
         Run("Stop Assist reacts without escaping its leash", StopAssistIsBounded);
@@ -37,7 +39,7 @@ internal static class Program
             return 1;
         }
 
-        Console.WriteLine("All 12 core tests passed.");
+        Console.WriteLine("All 14 core tests passed.");
         PrintBenchmarks();
         return 0;
     }
@@ -55,7 +57,7 @@ internal static class Program
         Equal(120f, filter.FastAimThreshold);
 
         Version? version = typeof(BrakeDeadzoneFilter).Assembly.GetName().Version;
-        True(version == new Version(0, 2, 4, 0), $"Unexpected assembly version: {version}");
+        True(version == new Version(0, 2, 5, 0), $"Unexpected assembly version: {version}");
         True(typeof(BrakeDeadzoneFilter).FullName == "BrakeFilter.BrakeDeadzoneFilter",
             "The saved-profile type identity changed.");
         PluginNameAttribute? name = typeof(BrakeDeadzoneFilter)
@@ -230,6 +232,77 @@ internal static class Program
 
         estimator.Clear();
         Equal(0.005f, estimator.PeriodSeconds, 0.000001f);
+    }
+
+    private static void PositionSamplingIsStable()
+    {
+        var baseline = new PositionMotionEstimator();
+        var duplicates = new PositionMotionEstimator();
+        var jittered = new PositionMotionEstimator();
+        baseline.Reset(Vector2.Zero);
+        duplicates.Reset(Vector2.Zero);
+        jittered.Reset(Vector2.Zero);
+
+        MotionFrame baselineMotion = default;
+        MotionFrame duplicateMotion = default;
+        MotionFrame jitteredMotion = default;
+        for (int step = 1; step <= 96; step++)
+        {
+            Vector2 previous = new((step - 1) * 0.5f, 0f);
+            Vector2 current = new(step * 0.5f, 0f);
+            baselineMotion = baseline.Observe(current, 0.005f);
+
+            MotionFrame duplicate = duplicates.Observe(previous, 0.002f);
+            True(!duplicate.HasMotionSample, "An unchanged coordinate became a motion sample.");
+            duplicateMotion = duplicates.Observe(current, 0.003f);
+
+            float jitteredPeriod = (step & 1) == 0 ? 0.007f : 0.003f;
+            jitteredMotion = jittered.Observe(current, jitteredPeriod);
+        }
+
+        True(baselineMotion.HasMotionSample && duplicateMotion.HasMotionSample,
+            "A changed coordinate was not recognized as motion.");
+        Equal(100f, baselineMotion.Speed, 0.01f);
+        Equal(baselineMotion.Speed, duplicateMotion.Speed, 0.01f);
+        Equal(baselineMotion.Speed, jitteredMotion.Speed, 0.01f);
+    }
+
+    private static void DuplicateReportsStayTransparent()
+    {
+        var engine = new AdvancedAimEngine
+        {
+            StabilityRadius = 0f,
+            StopAssist = 1f
+        };
+        engine.Reset(Vector2.Zero);
+        for (int step = 1; step <= 8; step++)
+        {
+            Vector2 input = new(step, 0f);
+            engine.Process(input, 0.005f, 200f, true);
+        }
+
+        Vector2 duplicate = new(8f, 0f);
+        Equal(duplicate, engine.Process(duplicate, 0.005f, 0f, false), 0.000001f);
+
+        var filter = new BrakeDeadzoneFilter { AdvancedFeatures = true };
+        IDeviceReport? emitted = null;
+        int emittedCount = 0;
+        filter.Emit += report =>
+        {
+            emitted = report;
+            emittedCount++;
+        };
+
+        filter.Consume(Report(50f, 75f));
+        FakeTabletReport pressureReport = Report(50f, 75f);
+        pressureReport.Pressure = 123;
+        pressureReport.PenButtons = new[] { true, false };
+        filter.Consume(pressureReport);
+
+        True(ReferenceEquals(emitted, pressureReport), "The duplicate report was not emitted immediately.");
+        True(emittedCount == 2, $"Expected 2 emitted reports, got {emittedCount}.");
+        True(pressureReport.Pressure == 123 && pressureReport.PenButtons[0],
+            "Pressure or button data changed on a coordinate duplicate.");
     }
 
     private static void AdvancedGateIsTransparent()

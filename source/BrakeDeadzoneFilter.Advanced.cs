@@ -10,7 +10,7 @@ public sealed partial class BrakeDeadzoneFilter
 {
     private const float AdvancedResetTime = 0.050f;
 
-    private readonly ReportPeriodEstimator _reportPeriod = new();
+    private readonly PositionMotionEstimator _motionEstimator = new();
     private Vector2 _millimetresPerUnit = Vector2.One;
     private long _advancedLastTimestamp;
     private bool _advancedHasTimestamp;
@@ -30,42 +30,35 @@ public sealed partial class BrakeDeadzoneFilter
         }
     }
 
-    private float MeasureAdvancedMotion(Vector2 rawDelta, out float physicalSpeed)
+    private MotionFrame MeasureAdvancedMotion(Vector2 rawPosition)
     {
-        physicalSpeed = 0f;
         if (!AdvancedFeatures)
         {
-            return 0f;
+            return default;
         }
 
+        Vector2 physicalPosition = rawPosition * _millimetresPerUnit;
         long timestamp = Stopwatch.GetTimestamp();
         if (!_advancedHasTimestamp)
         {
             _advancedLastTimestamp = timestamp;
             _advancedHasTimestamp = true;
-            return 0f;
+            _motionEstimator.Reset(physicalPosition);
+            return default;
         }
 
         float measuredPeriod = (float)((timestamp - _advancedLastTimestamp) / (double)Stopwatch.Frequency);
         _advancedLastTimestamp = timestamp;
         if (!float.IsFinite(measuredPeriod) || measuredPeriod <= 0f || measuredPeriod > AdvancedResetTime)
         {
-            return measuredPeriod;
+            _motionEstimator.Reset(physicalPosition);
+            return new MotionFrame(measuredPeriod, 0f, false);
         }
 
-        float stablePeriod = _reportPeriod.Observe(measuredPeriod);
-        float distanceSquared = (rawDelta * _millimetresPerUnit).LengthSquared();
-        if (float.IsFinite(distanceSquared))
-        {
-            // Distance per report is the primary motion signal. Host time is
-            // only a rolling conversion factor from mm/report to mm/s.
-            physicalSpeed = MathF.Sqrt(distanceSquared) / stablePeriod;
-        }
-
-        return stablePeriod;
+        return _motionEstimator.Observe(physicalPosition, measuredPeriod);
     }
 
-    private Vector2 ApplyAdvanced(Vector2 basicPosition, float reportPeriod)
+    private Vector2 ApplyAdvanced(Vector2 basicPosition, MotionFrame motion)
     {
         if (!AdvancedFeatures)
         {
@@ -73,7 +66,11 @@ public sealed partial class BrakeDeadzoneFilter
         }
 
         Vector2 millimetrePosition = basicPosition * _millimetresPerUnit;
-        Vector2 advancedPosition = _advancedEngine.Process(millimetrePosition, reportPeriod);
+        Vector2 advancedPosition = _advancedEngine.Process(
+            millimetrePosition,
+            motion.ElapsedPeriod,
+            motion.Speed,
+            motion.HasMotionSample);
         if (!AimMath.IsFinite(advancedPosition))
         {
             ClearAdvancedState();
@@ -91,7 +88,9 @@ public sealed partial class BrakeDeadzoneFilter
             return;
         }
 
-        _advancedEngine.Reset(rawPosition * _millimetresPerUnit);
+        Vector2 physicalPosition = rawPosition * _millimetresPerUnit;
+        _advancedEngine.Reset(physicalPosition);
+        _motionEstimator.Reset(physicalPosition);
         _advancedLastTimestamp = Stopwatch.GetTimestamp();
         _advancedHasTimestamp = true;
     }
@@ -99,7 +98,7 @@ public sealed partial class BrakeDeadzoneFilter
     private void ClearAdvancedState()
     {
         _advancedEngine.Clear();
-        _reportPeriod.Clear();
+        _motionEstimator.Clear();
         _advancedLastTimestamp = 0;
         _advancedHasTimestamp = false;
     }

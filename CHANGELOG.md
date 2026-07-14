@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.5
+
+- Separated transport-report timing from actual changed-coordinate motion samples.
+- Prevented identical X/Y reports used for pressure or button updates from appearing as artificial zero-speed deceleration.
+- Kept every report synchronous and unbuffered while omitting coordinate duplicates only from velocity and Stop Assist decisions.
+- Added a rolling changed-coordinate period estimate so alternating short/long host arrival intervals do not modulate physical speed.
+- Added deterministic regression coverage for host-timing jitter, duplicate coordinate reports, pressure/button preservation, and false Stop Assist activation.
+
 ## v0.2.4
 
 - Changed Advanced velocity to use physical distance per report as the primary motion signal instead of each individual host-timed interval.
