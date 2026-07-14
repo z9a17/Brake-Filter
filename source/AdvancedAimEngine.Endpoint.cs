@@ -23,7 +23,8 @@ public sealed partial class AdvancedAimEngine
         float speed,
         float reportPeriod,
         float previousPeak,
-        float holdRadius)
+        float holdRadius,
+        bool hasMotionSample)
     {
         if (StabilityRadius <= 0f)
         {
@@ -33,16 +34,17 @@ public sealed partial class AdvancedAimEngine
 
         float speedDrop = 1f - speed / MathF.Max(previousPeak, 1f);
         bool strongDeceleration =
+            hasMotionSample &&
             _wasAboveStopCandidateSpeed &&
             previousPeak > MathF.Max(40f, FastAimThreshold * 0.60f) &&
             speed < StopCandidateSpeed &&
             speedDrop > 0.50f;
 
-        if (speed >= StopCandidateSpeed)
+        if (hasMotionSample && speed >= StopCandidateSpeed)
         {
             _wasAboveStopCandidateSpeed = true;
         }
-        else if (strongDeceleration || speed < StopCandidateSpeed * 0.80f)
+        else if (hasMotionSample && (strongDeceleration || speed < StopCandidateSpeed * 0.80f))
         {
             _wasAboveStopCandidateSpeed = false;
         }
@@ -53,7 +55,7 @@ public sealed partial class AdvancedAimEngine
             return false;
         }
 
-        if (speed > StopCandidateSpeed)
+        if (hasMotionSample && speed > StopCandidateSpeed)
         {
             ResetStationaryCandidate();
             return false;

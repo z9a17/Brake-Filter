@@ -1,0 +1,95 @@
+using System;
+using System.Numerics;
+using System.Runtime.CompilerServices;
+
+namespace BrakeFilter;
+
+internal readonly struct MotionFrame
+{
+    public MotionFrame(float elapsedPeriod, float speed, bool hasMotionSample)
+    {
+        ElapsedPeriod = elapsedPeriod;
+        Speed = speed;
+        HasMotionSample = hasMotionSample;
+    }
+
+    public float ElapsedPeriod { get; }
+    public float Speed { get; }
+    public bool HasMotionSample { get; }
+}
+
+/// <summary>
+/// Separates transport reports from actual coordinate samples. Duplicate X/Y
+/// reports still advance elapsed time but never become zero-velocity samples.
+/// </summary>
+internal sealed class PositionMotionEstimator
+{
+    private const float MaximumPositionInterval = 0.020f;
+
+    private readonly ReportPeriodEstimator _arrivalPeriod = new();
+    private readonly ReportPeriodEstimator _positionPeriod = new();
+    private Vector2 _lastPosition;
+    private float _elapsedSincePosition;
+    private bool _initialized;
+
+    public void Reset(Vector2 position)
+    {
+        _arrivalPeriod.Clear();
+        _positionPeriod.Clear();
+        _lastPosition = position;
+        _elapsedSincePosition = 0f;
+        _initialized = AimMath.IsFinite(position);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public MotionFrame Observe(Vector2 position, float measuredArrivalPeriod)
+    {
+        if (!AimMath.IsFinite(position) ||
+            !float.IsFinite(measuredArrivalPeriod) ||
+            measuredArrivalPeriod <= 0f)
+        {
+            return new MotionFrame(measuredArrivalPeriod, 0f, false);
+        }
+
+        float elapsedPeriod = _arrivalPeriod.Observe(measuredArrivalPeriod);
+        if (!_initialized)
+        {
+            Reset(position);
+            return new MotionFrame(elapsedPeriod, 0f, false);
+        }
+
+        _elapsedSincePosition = MathF.Min(
+            _elapsedSincePosition + measuredArrivalPeriod,
+            1f);
+
+        if (position == _lastPosition)
+        {
+            return new MotionFrame(elapsedPeriod, 0f, false);
+        }
+
+        Vector2 delta = position - _lastPosition;
+        float distanceSquared = delta.LengthSquared();
+        _lastPosition = position;
+
+        float observedPositionPeriod = _elapsedSincePosition;
+        _elapsedSincePosition = 0f;
+        if (observedPositionPeriod <= MaximumPositionInterval)
+        {
+            _positionPeriod.Observe(observedPositionPeriod);
+        }
+
+        float speed = float.IsFinite(distanceSquared)
+            ? MathF.Sqrt(distanceSquared) / _positionPeriod.PeriodSeconds
+            : 0f;
+        return new MotionFrame(elapsedPeriod, speed, true);
+    }
+
+    public void Clear()
+    {
+        _arrivalPeriod.Clear();
+        _positionPeriod.Clear();
+        _lastPosition = Vector2.Zero;
+        _elapsedSincePosition = 0f;
+        _initialized = false;
+    }
+}
