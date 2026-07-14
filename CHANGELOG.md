@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.2
+
+- Expanded Movement Anti-Chatter to 1000 raw units, Brake Strength to 1.00, and Brake Start Speed to 10000 raw units per report.
+- Expanded advanced Stability Radius to 1.00 mm, Stop Assist to 1.00, Fast Aim Stability to 2.00, and Fast Aim Threshold to 5000 mm/s.
+- Raised the impossible-coordinate-jump guard above the full Wacom PTK-1240 tablet diagonal so legitimate high-resolution arm movement does not reset filter state.
+- Kept all defaults and recommended starting ranges unchanged; the additional range is intended for high-resolution tablets and experimentation.
+- Added regression coverage for 2000+ raw-unit reports and every expanded limit.
+
 ## v0.2.1
 
 - Removed continuous spatial filtering from Stability Radius; it now applies only after a stationary endpoint is confirmed.

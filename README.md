@@ -1,4 +1,4 @@
-# Brake Filter v0.2.1
+# Brake Filter v0.2.2
 
 Brake Filter is a low-latency OpenTabletDriver 0.6.7 pre-transform filter. It combines the Consistent Aim movement anti-chatter and bounded slow-movement braking with optional advanced endpoint and fast-aim stability.
 
@@ -13,11 +13,11 @@ The plugin is displayed simply as `Brake Filter` inside OpenTabletDriver. Versio
 
 | Setting | Default | Range | Effect |
 | --- | ---: | ---: | --- |
-| Movement Anti-Chatter | 10 | 0-100 raw units | Removes tiny movement and reduces sideways jitter. Zero disables it. |
-| Brake Strength | 0.45 | 0.00-0.95 | Steadies slow movement near a stop. Zero disables it. |
-| Brake Start Speed | 90 | 1-1000 raw units/report | Braking fades in below this speed and is off at or above it. |
+| Movement Anti-Chatter | 10 | 0-1000 raw units | Removes tiny movement and reduces sideways jitter. Zero disables it. |
+| Brake Strength | 0.45 | 0.00-1.00 | Steadies slow movement near a stop. Zero disables it. |
+| Brake Start Speed | 90 | 1-10000 raw units/report | Braking fades in below this speed and is off at or above it. |
 
-These settings always work, even when Advanced Features is off. The suggested starting ranges in the tooltips target a Wacom PTH-660 at 200 Hz. Other tablets and report rates may need different values. This filter has also only been tested with the Wacom PTH-660.
+These settings always work, even when Advanced Features is off. The suggested starting ranges in the tooltips target a Wacom PTH-660 at 200 Hz. Other tablets and report rates may need different values. The higher v0.2.2 ceilings allow high-resolution, full-area tablets such as the PTK-1240 to tune around reports above 2000 raw units without hitting the old slider limit. PTK-1240-scale input is covered by automated tests, but has not been tested here on PTK-1240 hardware.
 
 ## Advanced settings
 
@@ -25,10 +25,12 @@ Advanced Features is **off by default**. Enable `Advanced Features (default: off
 
 | Setting | Default | Range | Effect |
 | --- | ---: | ---: | --- |
-| Stability Radius | 0.05 mm | 0.00-0.20 mm | Holds a confirmed stationary endpoint; it does not filter movement before the stop. |
-| Stop Assist | 0.25 | 0.00-0.50 | Adds a brief non-recursive brake during strong endpoint deceleration. |
-| Fast Aim Stability | 0.80 | 0.00-1.00 | Adds speed-scaled sideways strength inside the existing Movement Anti-Chatter stage. |
-| Fast Aim Threshold | 120 mm/s | 40-500 mm/s | Sets when fast lateral stability reaches full strength and calibrates Stop Assist. |
+| Stability Radius | 0.05 mm | 0.00-1.00 mm | Holds a confirmed stationary endpoint; it does not filter movement before the stop. |
+| Stop Assist | 0.25 | 0.00-1.00 | Adds a brief non-recursive brake during strong endpoint deceleration. |
+| Fast Aim Stability | 0.80 | 0.00-2.00 | Adds speed-scaled sideways strength inside the existing Movement Anti-Chatter stage. |
+| Fast Aim Threshold | 120 mm/s | 40-5000 mm/s | Sets when fast lateral stability reaches full strength and calibrates Stop Assist. |
+
+The defaults and recommended starting ranges did not change. The expanded upper limits are for unusual tablet resolutions, large areas, report rates, or deliberate experimentation. Very high Movement Anti-Chatter, Stability Radius, or Fast Aim Stability values can suppress intended corrections even though the implementation remains spatially bounded.
 
 ## How the settings work together
 
@@ -46,14 +48,14 @@ From PowerShell in this directory:
 .\build.ps1
 ```
 
-The script restores dependencies from NuGet, builds the plugin, runs all 31 regression tests, and produces:
+The script restores dependencies from NuGet, builds the plugin, runs all 33 regression tests, and produces:
 
 - `release\BrakeFilter.dll`
-- `release\Brake-Filter-v0.2.1.zip`
+- `release\Brake-Filter-v0.2.2.zip`
 
 ## Install and set up
 
-1. Download `Brake-Filter-v0.2.1.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
+1. Download `Brake-Filter-v0.2.2.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
 2. Open OpenTabletDriver and make sure your tablet is detected.
 3. Open **Plugins > Open Plugin Manager**.
 4. In the Plugin Manager, choose **Install plugin...** and select the downloaded ZIP.
@@ -87,6 +89,7 @@ Use only this filter while tuning it. Stacking multiple smoothing or anti-chatte
 - Advanced features have a separate off-by-default gate and reset cleanly when toggled.
 - Stop Assist uses a bounded two-tap FIR rather than a recursive smoothing tail.
 - State resets only on an explicit out-of-range report, not ordinary far-hover reports.
+- The impossible-jump guard sits above the full PTK-1240 coordinate diagonal, so valid high-resolution full-area reports do not reset filter state.
 - The report hot path is allocation-free under the included regression test.
 
 ## License

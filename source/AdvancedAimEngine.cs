@@ -16,10 +16,10 @@ public sealed class AdvancedAimEngine
     public const float DefaultStopAssist = 0.25f;
     public const float DefaultFastAimThreshold = 120f;
 
-    public const float MaximumStabilityRadius = 0.20f;
-    public const float MaximumStopAssist = 0.50f;
+    public const float MaximumStabilityRadius = 1f;
+    public const float MaximumStopAssist = 1f;
     public const float MinimumFastAimThreshold = 40f;
-    public const float MaximumFastAimThreshold = 500f;
+    public const float MaximumFastAimThreshold = 5000f;
 
     private const float MinimumDeltaTime = 0.00025f;
     private const float MaximumDeltaTime = 0.020f;
@@ -29,7 +29,7 @@ public sealed class AdvancedAimEngine
     private const float StopDwellSeconds = 0.010f;
     private const float StopWindowSeconds = 0.030f;
     private const float StationaryCoherence = 0.55f;
-    private const float MaximumBrakeAmount = 0.50f;
+    private const float MaximumBrakeAmount = 1f;
     private const float MaximumStopAssistOffset = 0.10f;
 
     private bool _initialized;
