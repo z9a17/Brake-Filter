@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.3
+
+- Split the two large implementation files into focused pipeline, settings, movement, advanced integration, endpoint, state, and math files.
+- Centralized duplicated finite checks, clamping, interpolation, deadzone, and spatial-leash math in `AimMath`.
+- Simplified method names and the main processing flow without changing the filter's public type or OTD display name.
+- Reduced the regression suite from 33 narrow tests to 11 focused core behavior, safety, allocation, and PTK-1240-scale tests.
+- Kept all v0.2.2 settings, limits, defaults, and filter behavior intact.
+
 ## v0.2.2
 
 - Expanded Movement Anti-Chatter to 1000 raw units, Brake Strength to 1.00, and Brake Start Speed to 10000 raw units per report.
