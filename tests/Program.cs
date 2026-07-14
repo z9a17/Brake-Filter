@@ -15,7 +15,7 @@ internal static class Program
     private static int Main()
     {
         Run("Documented defaults are real object defaults", DefaultsAreInitialized);
-        Run("Assembly is v0.2.1 and OTD name has no version", VersionMetadataIsV021);
+        Run("Assembly is v0.2.2 and OTD name has no version", VersionMetadataIsV022);
         Run("Setting labels expose defaults and units", SettingMetadataIsVisible);
         Run("Advanced features are off by default and visibly gated", AdvancedMetadataIsGated);
         Run("First tablet report passes through unchanged", FirstReportPassesThrough);
@@ -26,6 +26,8 @@ internal static class Program
         Run("Far-hover proximity reports remain filtered", FarHoverReportsRemainFiltered);
         Run("Large coordinate jumps reset safely", LargeJumpResetsSafely);
         Run("Invalid settings cannot poison the filter", InvalidSettingsAreSanitized);
+        Run("Expanded v0.2.2 setting limits are accepted", ExpandedSettingLimitsAreAccepted);
+        Run("PTK-1240-scale reports can use the expanded brake range", Ptk1240ScaleReportsCanBeBraked);
         Run("Invalid positions reset state before the next valid report", InvalidPositionResetsState);
         Run("Anti-chatter no longer depends on Brake Start Speed", AntichatterIsIndependentFromBrakeSpeed);
         Run("Disabled advanced settings cannot change basic output", DisabledAdvancedSettingsAreTransparent);
@@ -48,7 +50,7 @@ internal static class Program
 
         if (Failures.Count == 0)
         {
-            Console.WriteLine("All 31 tests passed.");
+            Console.WriteLine("All 33 tests passed.");
             PrintHotPathBenchmark();
             return 0;
         }
@@ -89,10 +91,10 @@ internal static class Program
         Equal(120f, filter.FastAimThreshold);
     }
 
-    private static void VersionMetadataIsV021()
+    private static void VersionMetadataIsV022()
     {
         Version? version = typeof(BrakeDeadzoneFilter).Assembly.GetName().Version;
-        True(version == new Version(0, 2, 1, 0), $"Unexpected assembly version: {version}");
+        True(version == new Version(0, 2, 2, 0), $"Unexpected assembly version: {version}");
 
         PluginNameAttribute? name = typeof(BrakeDeadzoneFilter)
             .GetCustomAttributes(typeof(PluginNameAttribute), inherit: false)
@@ -257,10 +259,10 @@ internal static class Program
         var filter = CreateFilter(out _);
         filter.Consume(Report(0f, 0f));
 
-        FakeTabletReport jump = Report(5001f, 0f);
+        FakeTabletReport jump = Report(131073f, 0f);
         filter.Consume(jump);
 
-        Equal(new Vector2(5001f, 0f), jump.Position);
+        Equal(new Vector2(131073f, 0f), jump.Position);
     }
 
     private static void InvalidSettingsAreSanitized()
@@ -279,9 +281,60 @@ internal static class Program
         filter.MovementAntichatter = 10000f;
         filter.BrakeSmoothing = 2f;
         filter.BrakeSpeed = 0f;
-        Equal(100f, filter.MovementAntichatter);
-        Equal(0.95f, filter.BrakeSmoothing);
+        Equal(1000f, filter.MovementAntichatter);
+        Equal(1f, filter.BrakeSmoothing);
         Equal(1f, filter.BrakeSpeed);
+    }
+
+    private static void ExpandedSettingLimitsAreAccepted()
+    {
+        var filter = new BrakeDeadzoneFilter
+        {
+            MovementAntichatter = 1000f,
+            BrakeSmoothing = 1f,
+            BrakeSpeed = 10000f,
+            StabilityRadius = 1f,
+            StopAssist = 1f,
+            FastAimStability = 2f,
+            FastAimThreshold = 5000f
+        };
+
+        Equal(1000f, filter.MovementAntichatter);
+        Equal(1f, filter.BrakeSmoothing);
+        Equal(10000f, filter.BrakeSpeed);
+        Equal(1f, filter.StabilityRadius);
+        Equal(1f, filter.StopAssist);
+        Equal(2f, filter.FastAimStability);
+        Equal(5000f, filter.FastAimThreshold);
+
+        filter.BrakeSpeed = 20000f;
+        filter.StabilityRadius = 2f;
+        filter.StopAssist = 2f;
+        filter.FastAimStability = 3f;
+        filter.FastAimThreshold = 10000f;
+        Equal(10000f, filter.BrakeSpeed);
+        Equal(1f, filter.StabilityRadius);
+        Equal(1f, filter.StopAssist);
+        Equal(2f, filter.FastAimStability);
+        Equal(5000f, filter.FastAimThreshold);
+    }
+
+    private static void Ptk1240ScaleReportsCanBeBraked()
+    {
+        var filter = CreateFilter(out _);
+        filter.MovementAntichatter = 0f;
+        filter.BrakeSmoothing = 1f;
+        filter.BrakeSpeed = 10000f;
+        filter.Consume(Report(0f, 0f));
+
+        FakeTabletReport firstFastReport = Report(2001f, 0f);
+        filter.Consume(firstFastReport);
+        Equal(Vector2.Zero, firstFastReport.Position);
+
+        FakeTabletReport secondFastReport = Report(4002f, 0f);
+        filter.Consume(secondFastReport);
+        Equal(new Vector2(2001f, 0f), secondFastReport.Position);
+        True(float.IsFinite(secondFastReport.Position.X), "High-speed output became invalid.");
     }
 
     private static void InvalidPositionResetsState()
