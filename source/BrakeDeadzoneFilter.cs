@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using OpenTabletDriver.Plugin.Attributes;
@@ -11,7 +12,7 @@ namespace BrakeFilter;
 /// Suppresses small raw-position chatter and applies bounded, speed-sensitive
 /// braking before OpenTabletDriver transforms tablet coordinates to pixels.
 /// </summary>
-[PluginName("Brake Filter v0.1")]
+[PluginName("Brake Filter")]
 public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceReport>
 {
     private const float DefaultMovementAntichatter = 10f;
@@ -31,10 +32,15 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
     private const float FullBrakeSpeedRatio = 0.35f;
 
     private bool _initialized;
+    private readonly AdvancedAimEngine _advancedEngine = new();
     private Vector2 _previousRawPosition;
     private Vector2 _antichatterPosition;
     private Vector2 _movementDirection;
+    private Vector2 _millimetresPerUnit = Vector2.One;
     private float _smoothedSpeed;
+    private long _advancedLastTimestamp;
+    private bool _advancedHasTimestamp;
+    private bool _advancedFeatures;
 
     private float _movementAntichatter = DefaultMovementAntichatter;
     private float _brakeSmoothing = DefaultBrakeSmoothing;
@@ -102,6 +108,99 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
             fallback: DefaultBrakeSpeed);
     }
 
+    [BooleanProperty(
+        "Advanced Features (default: off)",
+        "Enables endpoint Stop Assist and physical fast-aim stability. The advanced settings below have no effect while this is off.")]
+    [DefaultPropertyValue(false)]
+    [ToolTip(
+        "OFF BY DEFAULT. Turn this on before using Stop Assist, Stability Radius, Fast Aim Stability, or Fast Aim Threshold.\n" +
+        "The normal Movement Anti-Chatter and Brake Strength stages remain active independently.")]
+    public bool AdvancedFeatures
+    {
+        get => _advancedFeatures;
+        set
+        {
+            if (_advancedFeatures == value)
+            {
+                return;
+            }
+
+            _advancedFeatures = value;
+            ClearAdvancedState();
+        }
+    }
+
+    [SliderProperty("Advanced - Stability Radius (default: 0.05)", 0f, AdvancedAimEngine.MaximumStabilityRadius, AdvancedAimEngine.DefaultStabilityRadius)]
+    [DefaultPropertyValue(AdvancedAimEngine.DefaultStabilityRadius)]
+    [Unit("mm")]
+    [ToolTip(
+        "ADVANCED FEATURES MUST BE ON. Physical endpoint hold radius.\n" +
+        "Increase it for steadier stops; decrease it if tiny corrections feel sticky. Values above 0.10 mm are aggressive.")]
+    public float StabilityRadius
+    {
+        get => _advancedEngine.StabilityRadius;
+        set => _advancedEngine.StabilityRadius = value;
+    }
+
+    [SliderProperty("Advanced - Stop Assist (default: 0.25)", 0f, AdvancedAimEngine.MaximumStopAssist, AdvancedAimEngine.DefaultStopAssist)]
+    [DefaultPropertyValue(AdvancedAimEngine.DefaultStopAssist)]
+    [Unit("ratio")]
+    [ToolTip(
+        "ADVANCED FEATURES MUST BE ON. Adds a short, non-recursive brake while a fast movement decelerates into its endpoint.\n" +
+        "It releases on new movement and does not add a continuing cursor tail.")]
+    public float StopAssist
+    {
+        get => _advancedEngine.StopAssist;
+        set => _advancedEngine.StopAssist = value;
+    }
+
+    [SliderProperty("Advanced - Fast Aim Stability (default: 0.80)", 0f, AdvancedAimEngine.MaximumFastAimStability, AdvancedAimEngine.DefaultFastAimStability)]
+    [DefaultPropertyValue(AdvancedAimEngine.DefaultFastAimStability)]
+    [Unit("ratio")]
+    [ToolTip(
+        "ADVANCED FEATURES MUST BE ON. Controls sideways stability during fast jumps while preserving forward movement.\n" +
+        "Decrease it if curved movement feels constrained; increase it if jump lines shake sideways.")]
+    public float FastAimStability
+    {
+        get => _advancedEngine.FastAimStability;
+        set => _advancedEngine.FastAimStability = value;
+    }
+
+    [SliderProperty("Advanced - Fast Aim Threshold (default: 120)", AdvancedAimEngine.MinimumFastAimThreshold, AdvancedAimEngine.MaximumFastAimThreshold, AdvancedAimEngine.DefaultFastAimThreshold)]
+    [DefaultPropertyValue(AdvancedAimEngine.DefaultFastAimThreshold)]
+    [Unit("mm/s")]
+    [ToolTip(
+        "ADVANCED FEATURES MUST BE ON. Speed at which forward movement becomes almost raw.\n" +
+        "Lower it for a snappier response; raise it for more stability at medium speed.")]
+    public float FastAimThreshold
+    {
+        get => _advancedEngine.FastAimThreshold;
+        set => _advancedEngine.FastAimThreshold = value;
+    }
+
+    [TabletReference]
+    public TabletReference TabletReference
+    {
+        set
+        {
+            DigitizerSpecifications? digitizer = value?.Properties?.Specifications?.Digitizer;
+            if (digitizer is null)
+            {
+                // OTD may trigger tablet-reference properties while constructing a
+                // filter before the profile has resolved its full tablet metadata.
+                // Raw-unit scaling is safe until a complete reference is supplied.
+                _millimetresPerUnit = Vector2.One;
+                ClearState();
+                return;
+            }
+
+            _millimetresPerUnit = new Vector2(
+                SafeScale(digitizer.Width, digitizer.MaxX),
+                SafeScale(digitizer.Height, digitizer.MaxY));
+            ClearState();
+        }
+    }
+
     public event Action<IDeviceReport>? Emit;
 
     public void Consume(IDeviceReport report)
@@ -130,6 +229,7 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
         if (!_initialized)
         {
             Reset(rawPosition);
+            ResetAdvanced(rawPosition);
             Emit?.Invoke(report);
             return;
         }
@@ -139,6 +239,7 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
         if (!float.IsFinite(distanceSquared) || distanceSquared > ResetDistanceSquared)
         {
             Reset(rawPosition);
+            ResetAdvanced(rawPosition);
             tabletReport.Position = rawPosition;
             Emit?.Invoke(report);
             return;
@@ -179,7 +280,7 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
             _antichatterPosition = antichatterTarget;
         }
 
-        tabletReport.Position = outputPosition;
+        tabletReport.Position = ApplyAdvanced(outputPosition);
         Emit?.Invoke(report);
     }
 
@@ -198,6 +299,7 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
         _antichatterPosition = Vector2.Zero;
         _movementDirection = Vector2.Zero;
         _smoothedSpeed = 0f;
+        ClearAdvancedState();
     }
 
     private void Reset(Vector2 rawPosition)
@@ -207,6 +309,55 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
         _movementDirection = Vector2.Zero;
         _smoothedSpeed = 0f;
         _initialized = true;
+    }
+
+    private Vector2 ApplyAdvanced(Vector2 basicPosition)
+    {
+        if (!AdvancedFeatures)
+        {
+            return basicPosition;
+        }
+
+        long timestamp = Stopwatch.GetTimestamp();
+        Vector2 millimetrePosition = basicPosition * _millimetresPerUnit;
+        if (!_advancedHasTimestamp)
+        {
+            _advancedEngine.Reset(millimetrePosition);
+            _advancedLastTimestamp = timestamp;
+            _advancedHasTimestamp = true;
+            return basicPosition;
+        }
+
+        float deltaTime = (float)((timestamp - _advancedLastTimestamp) / (double)Stopwatch.Frequency);
+        _advancedLastTimestamp = timestamp;
+        Vector2 advancedPosition = _advancedEngine.Process(millimetrePosition, deltaTime);
+        if (!IsFinite(advancedPosition))
+        {
+            ClearAdvancedState();
+            return basicPosition;
+        }
+
+        return advancedPosition / _millimetresPerUnit;
+    }
+
+    private void ResetAdvanced(Vector2 rawPosition)
+    {
+        ClearAdvancedState();
+        if (!AdvancedFeatures)
+        {
+            return;
+        }
+
+        _advancedEngine.Reset(rawPosition * _millimetresPerUnit);
+        _advancedLastTimestamp = Stopwatch.GetTimestamp();
+        _advancedHasTimestamp = true;
+    }
+
+    private void ClearAdvancedState()
+    {
+        _advancedEngine.Clear();
+        _advancedLastTimestamp = 0;
+        _advancedHasTimestamp = false;
     }
 
     private void UpdateMovementDirection(Vector2 rawDelta, float speed)
@@ -351,6 +502,13 @@ public sealed class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceRepo
         return float.IsFinite(value)
             ? Math.Clamp(value, minimum, maximum)
             : fallback;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static float SafeScale(float millimetres, float maximumRaw)
+    {
+        float scale = millimetres / maximumRaw;
+        return float.IsFinite(scale) && scale > 0f ? scale : 1f;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
