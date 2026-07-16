@@ -58,7 +58,7 @@ internal static class Program
         Equal(120f, filter.FastAimThreshold);
 
         Version? version = typeof(BrakeDeadzoneFilter).Assembly.GetName().Version;
-        True(version == new Version(0, 3, 0, 0), $"Unexpected assembly version: {version}");
+        True(version == new Version(0, 3, 1, 0), $"Unexpected assembly version: {version}");
         True(typeof(BrakeDeadzoneFilter).FullName == "BrakeFilter.BrakeDeadzoneFilter",
             "The saved-profile type identity changed.");
         PluginNameAttribute? name = typeof(BrakeDeadzoneFilter)
@@ -66,6 +66,28 @@ internal static class Program
             .Cast<PluginNameAttribute>()
             .SingleOrDefault();
         True(name?.Name == "Brake Filter", $"Unexpected OTD name: {name?.Name}");
+
+        string[] settingNames =
+        {
+            nameof(BrakeDeadzoneFilter.MovementAntichatter),
+            nameof(BrakeDeadzoneFilter.BrakeSmoothing),
+            nameof(BrakeDeadzoneFilter.BrakeSpeed),
+            nameof(BrakeDeadzoneFilter.AdvancedFeatures),
+            nameof(BrakeDeadzoneFilter.StabilityRadius),
+            nameof(BrakeDeadzoneFilter.StopAssist),
+            nameof(BrakeDeadzoneFilter.FastAimStability),
+            nameof(BrakeDeadzoneFilter.FastAimThreshold)
+        };
+        foreach (string settingName in settingNames)
+        {
+            ToolTipAttribute? tooltip = typeof(BrakeDeadzoneFilter)
+                .GetProperty(settingName)?
+                .GetCustomAttributes(typeof(ToolTipAttribute), false)
+                .Cast<ToolTipAttribute>()
+                .SingleOrDefault();
+            True(!string.IsNullOrWhiteSpace(tooltip?.ToolTip), $"{settingName} has no tooltip.");
+            True(tooltip!.ToolTip.Length <= 220, $"{settingName} tooltip is too long.");
+        }
     }
 
     private static void SettingsAreBounded()

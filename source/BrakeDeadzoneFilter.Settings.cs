@@ -25,11 +25,8 @@ public sealed partial class BrakeDeadzoneFilter
     [DefaultPropertyValue(DefaultMovementAntichatter)]
     [Unit("raw units")]
     [ToolTip(
-        "DEFAULT: 10. RANGE: 0-1000 raw units; 0 disables this stage.\n" +
-        "Suggested start for a PTH-660 at 200 Hz: 6-18.\n\n" +
-        "Suppresses tiny motion and sideways jitter while preserving the main movement direction.\n" +
-        "Increase it if fast movement looks shaky; decrease it if corrections feel sticky.\n" +
-        "Values above 25 are aggressive and can suppress intended corrections.")]
+        "Reduces tiny movement and sideways jitter while keeping your main aim direction. " +
+        "Higher is steadier but can make small corrections sticky; 0 disables it.")]
     public float MovementAntichatter
     {
         get => _movementAntichatter;
@@ -41,10 +38,8 @@ public sealed partial class BrakeDeadzoneFilter
     [DefaultPropertyValue(DefaultBrakeSmoothing)]
     [Unit("ratio")]
     [ToolTip(
-        "DEFAULT: 0.45. RANGE: 0.00-1.00; 0 disables this stage.\n\n" +
-        "Steadies slow movement near the end of a stroke; fast movement bypasses it.\n" +
-        "Increase it for steadier stops; decrease it if slow aim feels heavy.\n" +
-        "At 1.00, fully braked movement is held to the previous raw report for one report.")]
+        "Steadies low-speed aim near a stop while fast movement passes through. " +
+        "Higher gives stronger stops but heavier micro-aim; 0 disables it.")]
     public float BrakeSmoothing
     {
         get => _brakeSmoothing;
@@ -56,10 +51,8 @@ public sealed partial class BrakeDeadzoneFilter
     [DefaultPropertyValue(DefaultBrakeSpeed)]
     [Unit("raw units/report")]
     [ToolTip(
-        "DEFAULT: 90. RANGE: 1-10000 raw units per report.\n" +
-        "Suggested start for a PTH-660 at 200 Hz: 60-140.\n\n" +
-        "Braking is off at or above this speed and grows stronger as the pen slows.\n" +
-        "High-resolution full-area tablets can exceed 2000 raw units per report.")]
+        "Sets the speed below which Brake Strength fades in. " +
+        "Higher affects faster movement; lower limits braking to slower aim.")]
     public float BrakeSpeed
     {
         get => _brakeSpeed;
@@ -72,8 +65,8 @@ public sealed partial class BrakeDeadzoneFilter
         "Enables endpoint Stop Assist and physical fast-aim stability. Advanced settings have no effect while off.")]
     [DefaultPropertyValue(false)]
     [ToolTip(
-        "OFF BY DEFAULT. Turn this on before using Stability Radius, Stop Assist, Fast Aim Stability, or Fast Aim Threshold.\n" +
-        "Normal Movement Anti-Chatter and Brake Strength remain independent.")]
+        "Enables endpoint hold, Stop Assist, and fast-aim stability. " +
+        "Movement Anti-Chatter and Brake Strength still work while this is off.")]
     public bool AdvancedFeatures
     {
         get => _advancedFeatures;
@@ -93,8 +86,8 @@ public sealed partial class BrakeDeadzoneFilter
     [DefaultPropertyValue(AdvancedAimEngine.DefaultStabilityRadius)]
     [Unit("mm")]
     [ToolTip(
-        "ADVANCED FEATURES MUST BE ON. Holds only a confirmed stationary endpoint; it does not smooth continuous movement.\n" +
-        "Increase it for steadier settled stops. Values above 0.20 mm are aggressive.")]
+        "Holds a confirmed stopped endpoint inside this radius. " +
+        "Higher contains more shake but can resist tiny corrections; requires Advanced Features.")]
     public float StabilityRadius
     {
         get => _advancedEngine.StabilityRadius;
@@ -105,8 +98,8 @@ public sealed partial class BrakeDeadzoneFilter
     [DefaultPropertyValue(AdvancedAimEngine.DefaultStopAssist)]
     [Unit("ratio")]
     [ToolTip(
-        "ADVANCED FEATURES MUST BE ON. Adds a short non-recursive brake during strong endpoint deceleration.\n" +
-        "It releases on new movement and remains limited to 0.10 mm from input.")]
+        "Adds a brief bounded brake when fast aim sharply slows near an endpoint. " +
+        "Higher stops more strongly; 0 disables it and Advanced Features is required.")]
     public float StopAssist
     {
         get => _advancedEngine.StopAssist;
@@ -117,8 +110,8 @@ public sealed partial class BrakeDeadzoneFilter
     [DefaultPropertyValue(DefaultFastAimStability)]
     [Unit("ratio")]
     [ToolTip(
-        "ADVANCED FEATURES MUST BE ON. Adds speed-scaled sideways strength inside Movement Anti-Chatter.\n" +
-        "It cannot increase that stage's positional leash. Values above 1.00 are aggressive.")]
+        "Adds sideways anti-chatter as physical aim speed rises. " +
+        "Higher makes fast jumps straighter but can restrict curves; requires Advanced Features.")]
     public float FastAimStability
     {
         get => _fastAimStability;
@@ -130,8 +123,8 @@ public sealed partial class BrakeDeadzoneFilter
     [DefaultPropertyValue(AdvancedAimEngine.DefaultFastAimThreshold)]
     [Unit("mm/s")]
     [ToolTip(
-        "ADVANCED FEATURES MUST BE ON. Speed where extra lateral stability reaches full strength.\n" +
-        "It also calibrates Stop Assist. Raise it to reserve full stability for faster movement.")]
+        "Sets when Fast Aim Stability reaches full strength and calibrates Stop Assist. " +
+        "Lower engages sooner; higher reserves it for faster aim. Requires Advanced Features.")]
     public float FastAimThreshold
     {
         get => _advancedEngine.FastAimThreshold;

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.1
+
+- Rewrote every OpenTabletDriver hover description to be concise, practical, and readable in the limited tooltip space.
+- Each tooltip now explains the setting's effect and the tradeoff when increasing it; advanced controls clearly state their dependency.
+- Added regression coverage requiring every exposed setting to have a non-empty tooltip capped at 220 characters.
+
 ## v0.3.0
 
 - Removed a mathematically unreachable Stability Radius branch from endpoint detection.
