@@ -1,4 +1,4 @@
-# Brake Filter v0.2.5
+# Brake Filter v0.2.6
 
 Brake Filter is a low-latency OpenTabletDriver 0.6.7 pre-transform filter. It combines the Consistent Aim movement anti-chatter and bounded slow-movement braking with optional advanced endpoint and fast-aim stability.
 
@@ -51,11 +51,11 @@ From PowerShell in this directory:
 The script restores dependencies from NuGet, builds the plugin, runs 14 focused core tests, and produces:
 
 - `release\BrakeFilter.dll`
-- `release\Brake-Filter-v0.2.5.zip`
+- `release\Brake-Filter-v0.2.6.zip`
 
 ## Install and set up
 
-1. Download `Brake-Filter-v0.2.5.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
+1. Download `Brake-Filter-v0.2.6.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
 2. Open OpenTabletDriver and make sure your tablet is detected.
 3. Open **Plugins > Open Plugin Manager**.
 4. In the Plugin Manager, choose **Install plugin...** and select the downloaded ZIP.
@@ -87,6 +87,7 @@ Use only this filter while tuning it. Stacking multiple smoothing or anti-chatte
 - Movement Anti-Chatter and Fast Aim Stability run in one bounded stage rather than two stacked spatial filters.
 - Advanced velocity uses physical distance between changed tablet coordinates as its primary signal.
 - Identical X/Y reports still pass through immediately for pressure and button updates, but do not become false zero-speed motion samples.
+- The first coordinate change after an unusually long stationary interval passes through without driving velocity-based features; normal sampling resumes on the next change.
 - Separate rolling estimates track report arrival time and the interval between changed coordinates, resisting USB batching and host scheduling jitter.
 - The period estimate never buffers or averages positions, so it adds no cursor-report latency.
 - Stability Radius is endpoint-only and remains transparent during continuous movement.

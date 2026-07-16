@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.6
+
+- Fixed the first small coordinate change after a pause being divided by a stale short report period and therefore appearing much faster than it was.
+- Marked that single temporally ambiguous change as unavailable to Fast Aim Stability and Stop Assist while still emitting its report immediately.
+- Resumed normal velocity sampling on the next changed coordinate without adding buffering or cursor latency.
+- Added regression coverage for the long-pause case and sampling recovery.
+
 ## v0.2.5
 
 - Separated transport-report timing from actual changed-coordinate motion samples.

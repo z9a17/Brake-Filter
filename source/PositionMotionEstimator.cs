@@ -73,11 +73,16 @@ internal sealed class PositionMotionEstimator
 
         float observedPositionPeriod = _elapsedSincePosition;
         _elapsedSincePosition = 0f;
-        if (observedPositionPeriod <= MaximumPositionInterval)
+        if (observedPositionPeriod > MaximumPositionInterval)
         {
-            _positionPeriod.Observe(observedPositionPeriod);
+            // The device may have moved at any point during a long interval,
+            // so neither the accumulated time nor the normal sample period is
+            // a trustworthy divisor. Emit the report without using this one
+            // coordinate change for velocity-based features.
+            return new MotionFrame(elapsedPeriod, 0f, false);
         }
 
+        _positionPeriod.Observe(observedPositionPeriod);
         float speed = float.IsFinite(distanceSquared)
             ? MathF.Sqrt(distanceSquared) / _positionPeriod.PeriodSeconds
             : 0f;

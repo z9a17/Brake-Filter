@@ -57,7 +57,7 @@ internal static class Program
         Equal(120f, filter.FastAimThreshold);
 
         Version? version = typeof(BrakeDeadzoneFilter).Assembly.GetName().Version;
-        True(version == new Version(0, 2, 5, 0), $"Unexpected assembly version: {version}");
+        True(version == new Version(0, 2, 6, 0), $"Unexpected assembly version: {version}");
         True(typeof(BrakeDeadzoneFilter).FullName == "BrakeFilter.BrakeDeadzoneFilter",
             "The saved-profile type identity changed.");
         PluginNameAttribute? name = typeof(BrakeDeadzoneFilter)
@@ -265,6 +265,30 @@ internal static class Program
         Equal(100f, baselineMotion.Speed, 0.01f);
         Equal(baselineMotion.Speed, duplicateMotion.Speed, 0.01f);
         Equal(baselineMotion.Speed, jitteredMotion.Speed, 0.01f);
+
+        var afterPause = new PositionMotionEstimator();
+        afterPause.Reset(Vector2.Zero);
+        Vector2 pausePosition = Vector2.Zero;
+        for (int step = 1; step <= 8; step++)
+        {
+            pausePosition = new Vector2(step * 0.5f, 0f);
+            afterPause.Observe(pausePosition, 0.005f);
+        }
+
+        for (int report = 0; report < 5; report++)
+        {
+            afterPause.Observe(pausePosition, 0.005f);
+        }
+
+        pausePosition += new Vector2(0.1f, 0f);
+        MotionFrame uncertainMotion = afterPause.Observe(pausePosition, 0.005f);
+        True(!uncertainMotion.HasMotionSample,
+            "The first coordinate change after a long pause was treated as reliable velocity.");
+
+        pausePosition += new Vector2(0.1f, 0f);
+        MotionFrame resumedMotion = afterPause.Observe(pausePosition, 0.005f);
+        True(resumedMotion.HasMotionSample, "Velocity sampling did not resume after the long pause.");
+        Equal(20f, resumedMotion.Speed, 0.01f);
     }
 
     private static void DuplicateReportsStayTransparent()
