@@ -4,6 +4,8 @@ Brake Filter is a low-latency OpenTabletDriver 0.6.7 pre-transform filter. It co
 
 The plugin is displayed simply as `Brake Filter` inside OpenTabletDriver. Version numbers are shown only on GitHub and in the assembly metadata.
 
+> **Development disclosure:** Parts of this codebase and its documentation were written, reviewed, and refactored with assistance from GPT 5.6-Sol. Contributors should evaluate the implementation and tests as they would for any other third-party plugin rather than assuming AI-assisted code is correct.
+
 ## Requirements
 
 - OpenTabletDriver 0.6.7
