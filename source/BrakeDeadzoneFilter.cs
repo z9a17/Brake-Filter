@@ -9,6 +9,7 @@ namespace BrakeFilter;
 /// <summary>
 /// Low-latency raw-position anti-chatter and bounded braking for OTD.
 /// </summary>
+// Keep this CLR type name stable: OTD stores it in saved filter profiles.
 [PluginName("Brake Filter")]
 public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDeviceReport>
 {

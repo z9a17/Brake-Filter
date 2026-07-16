@@ -82,9 +82,9 @@ public sealed partial class BrakeDeadzoneFilter
 
     private void ResetAdvanced(Vector2 rawPosition)
     {
-        ClearAdvancedState();
         if (!AdvancedFeatures)
         {
+            ClearAdvancedState();
             return;
         }
 

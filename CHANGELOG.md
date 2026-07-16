@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.0
+
+- Removed a mathematically unreachable Stability Radius branch from endpoint detection.
+- Clarified the endpoint state machine with explicit stationary-window naming, documented transitions, and named tuning ratios.
+- Reused the speed-drop calculation shared by endpoint detection and Stop Assist.
+- Skipped Stop Assist calculations when its strength is zero and skipped offset limiting when no braking is active.
+- Replaced the settled endpoint distance check with an equivalent squared-distance comparison.
+- Removed redundant advanced-state clearing and reused the period estimator's existing return value.
+- Documented profile-type compatibility, motion-frame validity, and the report-period ring-buffer invariant.
+- Made build artifact versioning and reported test counts derive from their sources of truth.
+- Added regression coverage for the exact stop-speed threshold.
+
 ## v0.2.6
 
 - Fixed the first small coordinate change after a pause being divided by a stale short report period and therefore appearing much faster than it was.

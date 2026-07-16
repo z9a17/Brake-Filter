@@ -14,7 +14,11 @@ internal readonly struct MotionFrame
     }
 
     public float ElapsedPeriod { get; }
+
+    /// <summary>Physical speed in mm/s; valid only when HasMotionSample is true.</summary>
     public float Speed { get; }
+
+    /// <summary>Whether this report contains a trustworthy changed-coordinate sample.</summary>
     public bool HasMotionSample { get; }
 }
 
@@ -82,9 +86,9 @@ internal sealed class PositionMotionEstimator
             return new MotionFrame(elapsedPeriod, 0f, false);
         }
 
-        _positionPeriod.Observe(observedPositionPeriod);
+        float positionPeriod = _positionPeriod.Observe(observedPositionPeriod);
         float speed = float.IsFinite(distanceSquared)
-            ? MathF.Sqrt(distanceSquared) / _positionPeriod.PeriodSeconds
+            ? MathF.Sqrt(distanceSquared) / positionPeriod
             : 0f;
         return new MotionFrame(elapsedPeriod, speed, true);
     }

@@ -10,6 +10,7 @@ using BrakeFilter;
 internal static class Program
 {
     private static readonly List<string> Failures = new();
+    private static int TestsRun;
 
     private static int Main()
     {
@@ -39,7 +40,7 @@ internal static class Program
             return 1;
         }
 
-        Console.WriteLine("All 14 core tests passed.");
+        Console.WriteLine($"All {TestsRun} core tests passed.");
         PrintBenchmarks();
         return 0;
     }
@@ -57,7 +58,7 @@ internal static class Program
         Equal(120f, filter.FastAimThreshold);
 
         Version? version = typeof(BrakeDeadzoneFilter).Assembly.GetName().Version;
-        True(version == new Version(0, 2, 6, 0), $"Unexpected assembly version: {version}");
+        True(version == new Version(0, 3, 0, 0), $"Unexpected assembly version: {version}");
         True(typeof(BrakeDeadzoneFilter).FullName == "BrakeFilter.BrakeDeadzoneFilter",
             "The saved-profile type identity changed.");
         PluginNameAttribute? name = typeof(BrakeDeadzoneFilter)
@@ -375,6 +376,15 @@ internal static class Program
         Equal(anchor, engine.Process(new Vector2(0.04f, 0f), 0.005f), 0.001f);
         Vector2 jump = engine.Process(new Vector2(4f, 0f), 0.005f);
         True(jump.X > 3.98f, "Endpoint hold did not release on new movement.");
+
+        engine.Reset(Vector2.Zero);
+        Vector2 thresholdPosition = new(0.30f, 0f);
+        engine.Process(thresholdPosition, 0.005f, 60f, true);
+        engine.Process(thresholdPosition, 0.005f, 0f, false);
+        engine.Process(thresholdPosition, 0.005f, 0f, false);
+        True(!engine.IsSettled, "Movement at the stop threshold entered the stationary window.");
+        engine.Process(thresholdPosition, 0.005f, 0f, false);
+        True(engine.IsSettled, "A real stationary dwell after threshold movement did not settle.");
     }
 
     private static void StopAssistIsBounded()
@@ -479,6 +489,7 @@ internal static class Program
 
     private static void Run(string name, Action test)
     {
+        TestsRun++;
         try
         {
             test();

@@ -9,6 +9,7 @@ namespace BrakeFilter;
 /// </summary>
 internal sealed class ReportPeriodEstimator
 {
+    // Index wrapping below relies on this remaining a power of two.
     private const int WindowSize = 32;
     private const int WarmupSamples = 4;
     private const float DefaultPeriodSeconds = 0.005f; // 200 Hz

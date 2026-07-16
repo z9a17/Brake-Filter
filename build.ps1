@@ -11,7 +11,11 @@ $testProject = Join-Path $root "tests\BrakeFilter.Tests.csproj"
 $builtDll = Join-Path $root "source\bin\$Configuration\net8.0\BrakeFilter.dll"
 $releaseDirectory = Join-Path $root "release"
 $releaseDll = Join-Path $releaseDirectory "BrakeFilter.dll"
-$releaseZip = Join-Path $releaseDirectory "Brake-Filter-v0.2.6.zip"
+$versionNode = Select-Xml -LiteralPath $sourceProject -XPath "/Project/PropertyGroup/Version"
+if ($null -eq $versionNode) {
+    throw "Version is missing from $sourceProject"
+}
+$releaseZip = Join-Path $releaseDirectory "Brake-Filter-v$($versionNode.Node.InnerText).zip"
 
 dotnet build $sourceProject --configuration $Configuration
 if ($LASTEXITCODE -ne 0) {

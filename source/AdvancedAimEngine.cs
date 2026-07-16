@@ -13,6 +13,12 @@ public sealed partial class AdvancedAimEngine
     private const float ResetTime = 0.050f;
     private const float PeakReleaseSeconds = 0.050f;
     private const float MaximumStopAssistOffset = 0.10f;
+    private const float HoldRadiusScale = 1.33f;
+    private const float StopAssistDropStart = 0.25f;
+    private const float StopAssistDropEnd = 0.75f;
+    private const float StopAssistApproachStartRatio = 0.50f;
+    private const float StopAssistEndpointStartRatio = 0.29f;
+    private const float StopAssistEndpointEndRatio = 0.75f;
 
     private bool _initialized;
     private bool _settled;
@@ -104,16 +110,22 @@ public sealed partial class AdvancedAimEngine
             ? MathF.Max(speed, decayedPeak)
             : decayedPeak;
 
-        float holdRadius = StabilityRadius * 1.33f;
+        bool needsSpeedDrop = hasMotionSample && (StabilityRadius > 0f || StopAssist > 0f);
+        float speedDrop = needsSpeedDrop
+            ? 1f - speed / MathF.Max(previousPeak, 1f)
+            : 0f;
+
+        float holdRadius = StabilityRadius * HoldRadiusScale;
         if (TryHoldSettledPosition(input, holdRadius, out Vector2 heldPosition))
         {
             return heldPosition;
         }
 
-        if (UpdateStationaryCandidate(
+        if (UpdateStationaryWindow(
             input,
             distance,
             speed,
+            speedDrop,
             reportPeriod,
             previousPeak,
             holdRadius,
@@ -122,13 +134,15 @@ public sealed partial class AdvancedAimEngine
             return SettleAt(input);
         }
 
-        float brakeAmount = hasMotionSample
-            ? CalculateStopAssist(speed, previousPeak)
+        float brakeAmount = hasMotionSample && StopAssist > 0f
+            ? CalculateStopAssist(speed, previousPeak, speedDrop)
             : 0f;
         _output = brakeAmount > 0f
-            ? Vector2.Lerp(input, _previousInput, brakeAmount)
+            ? AimMath.LimitOffset(
+                Vector2.Lerp(input, _previousInput, brakeAmount),
+                input,
+                MaximumStopAssistOffset)
             : input;
-        _output = AimMath.LimitOffset(_output, input, MaximumStopAssistOffset);
         if (!AimMath.IsFinite(_output))
         {
             return Reset(input);
@@ -138,18 +152,20 @@ public sealed partial class AdvancedAimEngine
         return _output;
     }
 
-    private float CalculateStopAssist(float speed, float previousPeak)
+    private float CalculateStopAssist(float speed, float previousPeak, float speedDrop)
     {
-        float speedDrop = 1f - speed / MathF.Max(previousPeak, 1f);
-        float dropFactor = AimMath.SmoothStep(speedDrop, 0.25f, 0.75f);
+        float dropFactor = AimMath.SmoothStep(
+            speedDrop,
+            StopAssistDropStart,
+            StopAssistDropEnd);
         float approachFactor = AimMath.SmoothStep(
             previousPeak,
-            FastAimThreshold * 0.50f,
+            FastAimThreshold * StopAssistApproachStartRatio,
             FastAimThreshold);
         float endpointFactor = 1f - AimMath.SmoothStep(
             speed,
-            FastAimThreshold * 0.29f,
-            FastAimThreshold * 0.75f);
+            FastAimThreshold * StopAssistEndpointStartRatio,
+            FastAimThreshold * StopAssistEndpointEndRatio);
 
         return Math.Clamp(StopAssist * dropFactor * approachFactor * endpointFactor, 0f, 1f);
     }

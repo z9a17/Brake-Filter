@@ -9,8 +9,8 @@ public sealed partial class AdvancedAimEngine
     {
         _initialized = false;
         _settled = false;
-        _wasAboveStopCandidateSpeed = false;
-        ResetStationaryCandidate();
+        _stopCandidateArmed = false;
+        ClearStationaryWindow();
         _previousInput = Vector2.Zero;
         _holdAnchor = Vector2.Zero;
         _output = Vector2.Zero;
@@ -27,8 +27,8 @@ public sealed partial class AdvancedAimEngine
 
         _initialized = true;
         _settled = false;
-        _wasAboveStopCandidateSpeed = false;
-        ResetStationaryCandidate();
+        _stopCandidateArmed = false;
+        ClearStationaryWindow();
         _previousInput = input;
         _holdAnchor = input;
         _output = input;
@@ -44,7 +44,8 @@ public sealed partial class AdvancedAimEngine
             return false;
         }
 
-        if (StabilityRadius > 0f && Vector2.Distance(input, _holdAnchor) <= holdRadius)
+        if (StabilityRadius > 0f &&
+            Vector2.DistanceSquared(input, _holdAnchor) <= holdRadius * holdRadius)
         {
             _previousInput = input;
             _peakSpeed = MathF.Min(_peakSpeed, FastAimThreshold);
@@ -54,7 +55,7 @@ public sealed partial class AdvancedAimEngine
         }
 
         _settled = false;
-        ResetStationaryCandidate();
+        ClearStationaryWindow();
         output = default;
         return false;
     }
@@ -63,7 +64,7 @@ public sealed partial class AdvancedAimEngine
     {
         _settled = true;
         _holdAnchor = input;
-        ResetStationaryCandidate();
+        ClearStationaryWindow();
         _previousInput = input;
         _output = input;
         return _output;
