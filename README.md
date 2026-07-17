@@ -1,4 +1,4 @@
-# Brake Filter v0.3.1
+# Brake Filter v0.3.2
 
 Brake Filter is a low-latency OpenTabletDriver 0.6.7 pre-transform filter. It combines the Consistent Aim movement anti-chatter and bounded slow-movement braking with optional advanced endpoint and fast-aim stability.
 
@@ -53,11 +53,11 @@ From PowerShell in this directory:
 The script restores dependencies from NuGet, builds the plugin, runs 14 focused core tests, and produces:
 
 - `release\BrakeFilter.dll`
-- `release\Brake-Filter-v0.3.1.zip`
+- `release\Brake-Filter-v0.3.2.zip`
 
 ## Install and set up
 
-1. Download `Brake-Filter-v0.3.1.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
+1. Download `Brake-Filter-v0.3.2.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
 2. Open OpenTabletDriver and make sure your tablet is detected.
 3. Open **Plugins > Open Plugin Manager**.
 4. In the Plugin Manager, choose **Install plugin...** and select the downloaded ZIP.

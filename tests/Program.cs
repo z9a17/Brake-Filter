@@ -58,7 +58,7 @@ internal static class Program
         Equal(120f, filter.FastAimThreshold);
 
         Version? version = typeof(BrakeDeadzoneFilter).Assembly.GetName().Version;
-        True(version == new Version(0, 3, 1, 0), $"Unexpected assembly version: {version}");
+        True(version == new Version(0, 3, 2, 0), $"Unexpected assembly version: {version}");
         True(typeof(BrakeDeadzoneFilter).FullName == "BrakeFilter.BrakeDeadzoneFilter",
             "The saved-profile type identity changed.");
         PluginNameAttribute? name = typeof(BrakeDeadzoneFilter)
@@ -86,7 +86,9 @@ internal static class Program
                 .Cast<ToolTipAttribute>()
                 .SingleOrDefault();
             True(!string.IsNullOrWhiteSpace(tooltip?.ToolTip), $"{settingName} has no tooltip.");
-            True(tooltip!.ToolTip.Length <= 220, $"{settingName} tooltip is too long.");
+            True(tooltip!.ToolTip.Contains("\n\n", StringComparison.Ordinal),
+                $"{settingName} tooltip lacks structured paragraphs.");
+            True(tooltip.ToolTip.Length <= 500, $"{settingName} tooltip is too long.");
         }
     }
 

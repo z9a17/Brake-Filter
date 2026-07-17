@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.2
+
+- Replaced the overly short hover descriptions with structured explanations modeled after established OpenTabletDriver filters.
+- Every setting now states its range and default, what the filter actually calculates, and what increasing, decreasing, or disabling it changes.
+- Clarified that direction-relative anti-chatter is perpendicular to the recent pen trajectory, not horizontal on the screen.
+- Kept the filtering algorithms and all setting defaults unchanged.
+
 ## v0.3.1
 
 - Rewrote every OpenTabletDriver hover description to be concise, practical, and readable in the limited tooltip space.
