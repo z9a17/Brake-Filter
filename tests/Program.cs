@@ -58,7 +58,7 @@ internal static class Program
         Equal(120f, filter.FastAimThreshold);
 
         Version? version = typeof(BrakeDeadzoneFilter).Assembly.GetName().Version;
-        True(version == new Version(0, 3, 2, 0), $"Unexpected assembly version: {version}");
+        True(version == new Version(0, 3, 3, 0), $"Unexpected assembly version: {version}");
         True(typeof(BrakeDeadzoneFilter).FullName == "BrakeFilter.BrakeDeadzoneFilter",
             "The saved-profile type identity changed.");
         PluginNameAttribute? name = typeof(BrakeDeadzoneFilter)
@@ -67,28 +67,43 @@ internal static class Program
             .SingleOrDefault();
         True(name?.Name == "Brake Filter", $"Unexpected OTD name: {name?.Name}");
 
-        string[] settingNames =
+        var expectedDisplayNames = new Dictionary<string, string>
         {
-            nameof(BrakeDeadzoneFilter.MovementAntichatter),
-            nameof(BrakeDeadzoneFilter.BrakeSmoothing),
-            nameof(BrakeDeadzoneFilter.BrakeSpeed),
-            nameof(BrakeDeadzoneFilter.AdvancedFeatures),
-            nameof(BrakeDeadzoneFilter.StabilityRadius),
-            nameof(BrakeDeadzoneFilter.StopAssist),
-            nameof(BrakeDeadzoneFilter.FastAimStability),
-            nameof(BrakeDeadzoneFilter.FastAimThreshold)
+            [nameof(BrakeDeadzoneFilter.MovementAntichatter)] = "Movement Anti-Chatter",
+            [nameof(BrakeDeadzoneFilter.BrakeSmoothing)] = "Brake Strength",
+            [nameof(BrakeDeadzoneFilter.BrakeSpeed)] = "Brake Start Speed",
+            [nameof(BrakeDeadzoneFilter.AdvancedFeatures)] = "Advanced Features",
+            [nameof(BrakeDeadzoneFilter.StabilityRadius)] = "Stability Radius",
+            [nameof(BrakeDeadzoneFilter.StopAssist)] = "Stop Assist",
+            [nameof(BrakeDeadzoneFilter.FastAimStability)] = "Fast Aim Stability",
+            [nameof(BrakeDeadzoneFilter.FastAimThreshold)] = "Fast Aim Threshold"
         };
-        foreach (string settingName in settingNames)
+        foreach (KeyValuePair<string, string> setting in expectedDisplayNames)
         {
-            ToolTipAttribute? tooltip = typeof(BrakeDeadzoneFilter)
-                .GetProperty(settingName)?
-                .GetCustomAttributes(typeof(ToolTipAttribute), false)
-                .Cast<ToolTipAttribute>()
+            var property = typeof(BrakeDeadzoneFilter).GetProperty(setting.Key);
+            PropertyAttribute? propertyAttribute = property?
+                .GetCustomAttributes(typeof(PropertyAttribute), false)
+                .Cast<PropertyAttribute>()
                 .SingleOrDefault();
-            True(!string.IsNullOrWhiteSpace(tooltip?.ToolTip), $"{settingName} has no tooltip.");
+            True(propertyAttribute?.DisplayName == setting.Value,
+                $"{setting.Key} has unexpected OTD display name: {propertyAttribute?.DisplayName}");
+
+            ModifierAttribute[] modifiers = property?
+                .GetCustomAttributes(typeof(ModifierAttribute), false)
+                .Cast<ModifierAttribute>()
+                .ToArray() ?? Array.Empty<ModifierAttribute>();
+            ToolTipAttribute? tooltip = modifiers
+                .OfType<ToolTipAttribute>()
+                .SingleOrDefault();
+            True(!string.IsNullOrWhiteSpace(tooltip?.ToolTip), $"{setting.Key} has no tooltip.");
             True(tooltip!.ToolTip.Contains("\n\n", StringComparison.Ordinal),
-                $"{settingName} tooltip lacks structured paragraphs.");
-            True(tooltip.ToolTip.Length <= 500, $"{settingName} tooltip is too long.");
+                $"{setting.Key} tooltip lacks structured paragraphs.");
+            True(tooltip.ToolTip.Length <= 500, $"{setting.Key} tooltip is too long.");
+
+            int tooltipIndex = Array.FindIndex(modifiers, attribute => attribute is ToolTipAttribute);
+            int unitIndex = Array.FindIndex(modifiers, attribute => attribute is UnitAttribute);
+            True(unitIndex < 0 || tooltipIndex < unitIndex,
+                $"{setting.Key} tooltip must be applied before Unit wraps the OTD input control.");
         }
     }
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.3
+
+- Fixed custom descriptions being attached to the unit wrapper while OTD's numeric input retained only its automatic minimum/maximum tooltip.
+- Reordered tooltip and unit metadata so hovering the actual input field shows the full configuration explanation.
+- Removed defaults from every visible setting name and kept them in the hover descriptions.
+- Removed the `Advanced -` prefix from Stability Radius, Stop Assist, Fast Aim Stability, and Fast Aim Threshold.
+- Added regression coverage for OTD display names and the tooltip-before-unit ordering required by OTD 0.6.7.
+- Kept all filtering algorithms, defaults, and saved settings unchanged.
+
 ## v0.3.2
 
 - Replaced the overly short hover descriptions with structured explanations modeled after established OpenTabletDriver filters.
