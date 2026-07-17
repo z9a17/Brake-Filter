@@ -17,7 +17,7 @@ internal static class Program
         Run("Public plugin contract and defaults", PublicContractAndDefaults);
         Run("Settings reject invalid values and accept documented limits", SettingsAreBounded);
         Run("Report lifecycle resets only when required", ReportLifecycleIsSafe);
-        Run("Movement anti-chatter remains directional and spatially bounded", MovementFilterIsBounded);
+        Run("Movement anti-chatter is rotationally symmetric and bounded", MovementFilterIsBounded);
         Run("Braking is bounded and fast movement stays direct", BrakingIsBounded);
         Run("PTK-1240-scale reports use the expanded speed range", Ptk1240ScaleReportsWork);
         Run("Rolling report period resists USB bursts and host pauses", ReportPeriodIsStable);
@@ -184,26 +184,60 @@ internal static class Program
 
     private static void MovementFilterIsBounded()
     {
-        var filter = new BrakeDeadzoneFilter
+        var horizontal = new BrakeDeadzoneFilter
         {
             MovementAntichatter = 10f,
             BrakeSmoothing = 0f,
             BrakeSpeed = 10000f
         };
-        filter.Consume(Report(0f, 0f));
-
-        for (int x = 1; x <= 40; x++)
+        var vertical = new BrakeDeadzoneFilter
         {
-            FakeTabletReport report = Report(x, 0f);
-            filter.Consume(report);
-            True(Vector2.Distance(report.Position, new Vector2(x, 0f)) <= 10.001f,
-                $"Movement leash escaped at x={x}.");
+            MovementAntichatter = 10f,
+            BrakeSmoothing = 0f,
+            BrakeSpeed = 10000f
+        };
+        horizontal.Consume(Report(0f, 0f));
+        vertical.Consume(Report(0f, 0f));
+
+        foreach (float distance in new[] { 5f, 12f, 24f, 40f })
+        {
+            FakeTabletReport xReport = Report(distance, 0f);
+            FakeTabletReport yReport = Report(0f, distance);
+            horizontal.Consume(xReport);
+            vertical.Consume(yReport);
+
+            Equal(xReport.Position.X, yReport.Position.Y, 0.0001f);
+            Equal(xReport.Position.Y, -yReport.Position.X, 0.0001f);
+            True(Vector2.Distance(xReport.Position, new Vector2(distance, 0f)) <= 10.001f,
+                $"Horizontal leash escaped at {distance}.");
+            True(Vector2.Distance(yReport.Position, new Vector2(0f, distance)) <= 10.001f,
+                $"Vertical leash escaped at {distance}.");
+
+            if (distance == 5f)
+            {
+                Equal(Vector2.Zero, xReport.Position);
+                Equal(Vector2.Zero, yReport.Position);
+            }
+            else if (distance == 12f)
+            {
+                True(xReport.Position.X > 0f && xReport.Position.X < distance,
+                    "Slow radial movement did not release gradually.");
+            }
         }
 
-        filter.Consume(Report(140f, 0f));
-        FakeTabletReport diagonal = Report(240f, 5f);
-        filter.Consume(diagonal);
-        True(diagonal.Position.Y < 3f, "Directional anti-chatter did not reduce lateral jitter.");
+        var turns = new BrakeDeadzoneFilter
+        {
+            MovementAntichatter = 10f,
+            BrakeSmoothing = 0f
+        };
+        turns.Consume(Report(0f, 0f));
+        FakeTabletReport right = Report(100f, 0f);
+        turns.Consume(right);
+        Equal(new Vector2(100f, 0f), right.Position);
+
+        FakeTabletReport up = Report(100f, 100f);
+        turns.Consume(up);
+        Equal(new Vector2(100f, 100f), up.Position);
     }
 
     private static void BrakingIsBounded()

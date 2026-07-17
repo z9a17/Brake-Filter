@@ -29,9 +29,9 @@ public sealed partial class BrakeDeadzoneFilter
     [DefaultPropertyValue(DefaultMovementAntichatter)]
     [ToolTip(
         "Range: 0-1000 raw units; default: 10.\n\n" +
-        "Creates a direction-relative deadzone. Movement no larger than this value can be held, " +
-        "while deviations perpendicular to your recent movement path are reduced.\n" +
-        "Higher values suppress more shake but make micro-corrections and sharp turns stickier. " +
+        "Creates a 360-degree radial deadzone around the filtered cursor. " +
+        "The deadzone shrinks as per-report movement becomes faster.\n" +
+        "Higher values suppress more shake but can make micro-corrections sticky. " +
         "0 disables Movement Anti-Chatter. The cursor-to-pen offset remains limited to this value.")]
     [Unit("raw units")]
     public float MovementAntichatter
@@ -133,10 +133,10 @@ public sealed partial class BrakeDeadzoneFilter
     [DefaultPropertyValue(DefaultFastMotionStability)]
     [ToolTip(
         "Range: 0.00-2.00; default: 0.80.\n\n" +
-        "As physical speed rises, strengthens Anti-Chatter only perpendicular to your recent movement path. " +
-        "This is relative to your trajectory, not screen-horizontal.\n" +
-        "Higher values straighten fast jumps but can resist curves and sudden turns. " +
-        "0 adds no fast-speed boost. Requires Additional Stabilization.")]
+        "As physical speed rises, keeps radial Anti-Chatter active farther into fast movement " +
+        "without favoring any direction. It changes release speed, not the maximum positional leash.\n" +
+        "Higher values provide more fast-motion stability but release later. " +
+        "0 adds no fast-speed extension. Requires Additional Stabilization.")]
     [Unit("ratio")]
     public float FastAimStability
     {

@@ -22,7 +22,6 @@ public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDe
     private bool _initialized;
     private Vector2 _previousRawPosition;
     private Vector2 _antichatterPosition;
-    private Vector2 _movementDirection;
     private float _smoothedSpeed;
 
     public PipelinePosition Position => PipelinePosition.PreTransform;
@@ -72,7 +71,7 @@ public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDe
 
         float speed = MathF.Sqrt(distanceSquared);
         MotionFrame motion = MeasurePhysicalMotion(rawPosition);
-        Vector2 antichatterTarget = ApplyMovementFilter(rawPosition, rawDelta, speed, motion.Speed);
+        Vector2 antichatterTarget = ApplyMovementFilter(rawPosition, speed, motion.Speed);
 
         _smoothedSpeed = MotionMath.Lerp(_smoothedSpeed, speed, SpeedSmoothing);
         float brakeAmount = BrakeSmoothing * GetBrakeFactor(MathF.Max(speed, _smoothedSpeed));
@@ -102,7 +101,6 @@ public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDe
         _initialized = false;
         _previousRawPosition = Vector2.Zero;
         _antichatterPosition = Vector2.Zero;
-        _movementDirection = Vector2.Zero;
         _smoothedSpeed = 0f;
         ClearAdditionalStabilizationState();
     }
@@ -111,7 +109,6 @@ public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDe
     {
         _previousRawPosition = rawPosition;
         _antichatterPosition = rawPosition;
-        _movementDirection = Vector2.Zero;
         _smoothedSpeed = 0f;
         _initialized = true;
     }

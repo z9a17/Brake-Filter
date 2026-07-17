@@ -1,6 +1,8 @@
 # Brake Filter v0.3.7
 
-Brake Filter is a low-latency OpenTabletDriver 0.6.7 pre-transform filter. It combines direction-aware movement anti-chatter and bounded slow-movement braking with optional endpoint and fast-motion stabilization.
+Brake Filter is a low-latency OpenTabletDriver 0.6.7 pre-transform filter. This development branch combines rotationally symmetric movement anti-chatter and bounded slow-movement braking with optional endpoint and fast-motion stabilization.
+
+> **Experimental branch:** This branch tests a 360-degree radial Movement Anti-Chatter model. Stable release downloads remain on the `main` branch.
 
 The plugin is displayed simply as `Brake Filter` inside OpenTabletDriver. Its version appears in the dedicated **Plugin Version** field instead of being appended to the plugin name.
 
@@ -15,7 +17,7 @@ The plugin is displayed simply as `Brake Filter` inside OpenTabletDriver. Its ve
 
 | Setting | Default | Range | Effect |
 | --- | ---: | ---: | --- |
-| Movement Anti-Chatter | 10 | 0-1000 raw units | Removes tiny movement and reduces sideways jitter. Zero disables it. |
+| Movement Anti-Chatter | 10 | 0-1000 raw units | Removes tiny movement with a direction-neutral radial deadzone. Zero disables it. |
 | Brake Strength | 0.45 | 0.00-1.00 | Steadies slow movement near a stop. Zero disables it. |
 | Brake Start Speed | 90 | 1-10000 raw units/report | Braking fades in below this speed and is off at or above it. |
 
@@ -29,15 +31,15 @@ Additional Stabilization is **off by default**. Enable `Additional Stabilization
 | --- | ---: | ---: | --- |
 | Stability Radius | 0.05 mm | 0.00-1.00 mm | Holds a confirmed stationary endpoint; it does not filter movement before the stop. |
 | Endpoint Brake | 0.25 | 0.00-1.00 | Adds a brief non-recursive brake during strong endpoint deceleration. |
-| Fast-Motion Stability | 0.80 | 0.00-2.00 | Adds speed-scaled perpendicular stability inside the existing Movement Anti-Chatter stage. |
+| Fast-Motion Stability | 0.80 | 0.00-2.00 | Keeps radial anti-chatter active farther into fast movement without favoring a direction. |
 | Motion-Speed Threshold | 120 mm/s | 40-5000 mm/s | Sets when fast-motion stabilization reaches full strength and calibrates Endpoint Brake. |
 
 The defaults and recommended starting ranges did not change. The expanded upper limits are for unusual tablet resolutions, large areas, report rates, or deliberate experimentation. Very high Movement Anti-Chatter, Stability Radius, or Fast-Motion Stability values can suppress intended corrections even though the implementation remains spatially bounded.
 
 ## How the settings work together
 
-- **Movement Anti-Chatter** is the only general-purpose chatter filter and owns the maximum spatial leash.
-- **Fast-Motion Stability** modifies that same anti-chatter calculation during fast movement. It is not another smoothing pass and cannot increase the leash.
+- **Movement Anti-Chatter** is a rotationally symmetric radial deadzone and owns the maximum spatial leash.
+- **Fast-Motion Stability** delays that deadzone's speed-based release. It is not another smoothing pass and cannot increase the leash.
 - **Brake Strength** acts on ordinary slow movement. **Endpoint Brake** acts only on a strong speed drop after an approach, so constant-speed movement is unaffected.
 - **Stability Radius** remains transparent during continuous movement. It is consulted only to confirm and hold a stationary endpoint.
 - Setting every additional-stabilization strength to zero makes the enabled path transparent.
@@ -84,7 +86,7 @@ Starting with v0.3.5, releases are built and tested by GitHub Actions directly f
 - If the normal settings are not enough at endpoints, enable **Additional Stabilization** and start with its defaults.
 - Increase **Endpoint Brake** in steps of 0.05 for stronger endpoint braking.
 - Increase **Stability Radius** in steps of 0.01 mm if a settled endpoint releases too easily. It no longer affects normal micro-corrections before a stop.
-- Increase **Fast-Motion Stability** for straighter fast movement; decrease it if curves feel constrained.
+- Increase **Fast-Motion Stability** to retain more radial stabilization during fast movement; decrease it for earlier raw release.
 - Lower **Motion-Speed Threshold** to engage added stability sooner; raise it to reserve it for faster movement.
 - Test one change at a time. Values depend on the tablet resolution and report rate.
 
@@ -94,7 +96,8 @@ Starting with v0.3.5, releases are built and tested by GitHub Actions directly f
 - Fast movement disables braking immediately.
 - Braking is anchored to the previous raw report, preventing recursive lag accumulation.
 - Anti-chatter output remains spatially bounded relative to the raw pen position.
-- Movement Anti-Chatter and Fast-Motion Stability run in one bounded stage rather than two stacked spatial filters.
+- Movement Anti-Chatter treats every direction equally and shrinks its bounded radius as per-report movement becomes decisive.
+- Fast-Motion Stability extends the radial release range inside that same stage rather than stacking another spatial filter.
 - Physical-motion velocity uses distance between changed tablet coordinates as its primary signal.
 - Identical X/Y reports still pass through immediately for pressure and button updates, but do not become false zero-speed motion samples.
 - The first coordinate change after an unusually long stationary interval passes through without driving velocity-based features; normal sampling resumes on the next change.
@@ -111,7 +114,7 @@ Starting with v0.3.5, releases are built and tested by GitHub Actions directly f
 
 - `BrakeDeadzoneFilter.cs` contains the report pipeline and state lifecycle.
 - `BrakeDeadzoneFilter.Settings.cs` contains the public OTD settings and tooltips.
-- `BrakeDeadzoneFilter.Movement.cs` contains directional anti-chatter and braking.
+- `BrakeDeadzoneFilter.Movement.cs` contains radial anti-chatter, adaptive release, and braking.
 - `BrakeDeadzoneFilter.Stabilization.cs` connects tablet scaling and additional stabilization.
 - `MotionStabilityProcessor.cs` contains the stabilization processing flow.
 - `MotionStabilityProcessor.Endpoint.cs`, `.State.cs`, and `.Settings.cs` separate endpoint detection, state transitions, and configuration.

@@ -5,71 +5,36 @@ namespace BrakeFilter;
 
 public sealed partial class BrakeDeadzoneFilter
 {
-    private const float DirectionUpdateMinimumSpeed = 20f;
-    private const float DirectionSmoothing = 0.35f;
     private const float FullBrakeSpeedRatio = 0.35f;
+    private const float FullRadialReleaseRatio = 4f;
+    private const float FastStabilityReleaseExtension = 2f;
 
     private Vector2 ApplyMovementFilter(
         Vector2 rawPosition,
-        Vector2 rawDelta,
         float speed,
         float physicalSpeed)
     {
-        UpdateMovementDirection(rawDelta, speed);
-
-        Vector2 filteredDelta = ApplyDirectionalDeadzone(rawDelta, speed, physicalSpeed);
-        Vector2 target = _antichatterPosition + filteredDelta;
-        return MotionMath.LimitOffset(target, rawPosition, MovementAntichatter);
-    }
-
-    private void UpdateMovementDirection(Vector2 rawDelta, float speed)
-    {
-        if (speed <= DirectionUpdateMinimumSpeed)
+        float maximumRadius = MovementAntichatter;
+        if (maximumRadius <= 0f)
         {
-            return;
+            return rawPosition;
         }
 
-        Vector2 currentDirection = rawDelta / speed;
-        if (_movementDirection == Vector2.Zero)
-        {
-            _movementDirection = currentDirection;
-            return;
-        }
-
-        Vector2 blended = Vector2.Lerp(_movementDirection, currentDirection, DirectionSmoothing);
-        float lengthSquared = blended.LengthSquared();
-        _movementDirection = float.IsFinite(lengthSquared) && lengthSquared > 1e-12f
-            ? blended / MathF.Sqrt(lengthSquared)
-            : currentDirection;
-    }
-
-    private Vector2 ApplyDirectionalDeadzone(Vector2 rawDelta, float speed, float physicalSpeed)
-    {
-        float deadzone = MovementAntichatter;
-        if (deadzone <= 0f || speed <= 0f)
-        {
-            return rawDelta;
-        }
-
-        if (speed <= deadzone)
-        {
-            return Vector2.Zero;
-        }
-
-        if (_movementDirection == Vector2.Zero || speed < DirectionUpdateMinimumSpeed)
-        {
-            return rawDelta;
-        }
-
-        float forwardDistance = Vector2.Dot(rawDelta, _movementDirection);
-        Vector2 forwardMovement = _movementDirection * forwardDistance;
-        Vector2 sidewaysMovement = rawDelta - forwardMovement;
+        // Fast-Motion Stability extends the radial release range without
+        // introducing a preferred direction or increasing the positional leash.
         float fastBlend = AdditionalStabilizationEnabled
             ? MotionMath.SmoothStep(physicalSpeed, MotionSpeedThreshold * 0.50f, MotionSpeedThreshold)
             : 0f;
-        float lateralDeadzone = deadzone * (1f + FastMotionStability * fastBlend);
+        float releaseRatio = FullRadialReleaseRatio +
+            FastMotionStability * fastBlend * FastStabilityReleaseExtension;
+        float fullReleaseSpeed = maximumRadius * releaseRatio;
+        float release = MotionMath.SmoothStep(speed, maximumRadius, fullReleaseSpeed);
+        float radius = maximumRadius * (1f - release);
 
-        return forwardMovement + MotionMath.ApplyDeadzone(sidewaysMovement, lateralDeadzone);
+        // Applying the deadzone to the accumulated raw-to-filtered offset makes
+        // the filter rotationally symmetric and keeps it exactly radius-bounded.
+        Vector2 offset = rawPosition - _antichatterPosition;
+        return _antichatterPosition + MotionMath.ApplyDeadzone(offset, radius);
     }
 
     private float GetBrakeFactor(float speed)
