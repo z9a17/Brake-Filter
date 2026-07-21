@@ -23,11 +23,11 @@ internal static class Program
         Run("Rolling report period resists USB bursts and host pauses", ReportPeriodIsStable);
         Run("Position sampling ignores host jitter and coordinate duplicates", PositionSamplingIsStable);
         Run("Coordinate duplicates stay transparent", DuplicateReportsStayTransparent);
-        Run("Advanced gate is transparent when disabled or zeroed", AdvancedGateIsTransparent);
+        Run("Additional stabilization is transparent when disabled or zeroed", AdditionalStabilizationIsTransparent);
         Run("Endpoint hold is stationary-only and releases on intent", EndpointHoldBehaves);
-        Run("Stop Assist reacts without escaping its leash", StopAssistIsBounded);
+        Run("Endpoint Brake reacts without escaping its leash", EndpointBrakeIsBounded);
         Run("Randomized input always stays finite", RandomizedInputStaysFinite);
-        Run("Basic and advanced hot paths allocate no managed memory", HotPathsDoNotAllocate);
+        Run("Basic and additional-stabilization hot paths allocate no managed memory", HotPathsDoNotAllocate);
 
         if (Failures.Count != 0)
         {
@@ -51,16 +51,25 @@ internal static class Program
         Equal(10f, filter.MovementAntichatter);
         Equal(0.45f, filter.BrakeSmoothing);
         Equal(90f, filter.BrakeSpeed);
-        True(!filter.AdvancedFeatures, "Advanced features must default to off.");
+        True(!filter.AdvancedFeatures, "Additional stabilization must default to off.");
         Equal(0.05f, filter.StabilityRadius);
         Equal(0.25f, filter.StopAssist);
         Equal(0.80f, filter.FastAimStability);
         Equal(120f, filter.FastAimThreshold);
 
         Version? version = typeof(BrakeDeadzoneFilter).Assembly.GetName().Version;
-        True(version == new Version(0, 3, 3, 0), $"Unexpected assembly version: {version}");
+        True(version == new Version(0, 3, 4, 0), $"Unexpected assembly version: {version}");
         True(typeof(BrakeDeadzoneFilter).FullName == "BrakeFilter.BrakeDeadzoneFilter",
             "The saved-profile type identity changed.");
+        var assembly = typeof(BrakeDeadzoneFilter).Assembly;
+        True(assembly.GetType("BrakeFilter.MotionStabilityProcessor") is not null,
+            "MotionStabilityProcessor is missing.");
+        True(assembly.GetType("BrakeFilter.MotionMath") is not null,
+            "MotionMath is missing.");
+        True(assembly.GetType("BrakeFilter.AdvancedAimEngine") is null,
+            "The retired AdvancedAimEngine type is still present.");
+        True(assembly.GetType("BrakeFilter.AimMath") is null,
+            "The retired AimMath type is still present.");
         PluginNameAttribute? name = typeof(BrakeDeadzoneFilter)
             .GetCustomAttributes(typeof(PluginNameAttribute), false)
             .Cast<PluginNameAttribute>()
@@ -72,11 +81,11 @@ internal static class Program
             [nameof(BrakeDeadzoneFilter.MovementAntichatter)] = "Movement Anti-Chatter",
             [nameof(BrakeDeadzoneFilter.BrakeSmoothing)] = "Brake Strength",
             [nameof(BrakeDeadzoneFilter.BrakeSpeed)] = "Brake Start Speed",
-            [nameof(BrakeDeadzoneFilter.AdvancedFeatures)] = "Advanced Features",
+            [nameof(BrakeDeadzoneFilter.AdvancedFeatures)] = "Additional Stabilization",
             [nameof(BrakeDeadzoneFilter.StabilityRadius)] = "Stability Radius",
-            [nameof(BrakeDeadzoneFilter.StopAssist)] = "Stop Assist",
-            [nameof(BrakeDeadzoneFilter.FastAimStability)] = "Fast Aim Stability",
-            [nameof(BrakeDeadzoneFilter.FastAimThreshold)] = "Fast Aim Threshold"
+            [nameof(BrakeDeadzoneFilter.StopAssist)] = "Endpoint Brake",
+            [nameof(BrakeDeadzoneFilter.FastAimStability)] = "Fast-Motion Stability",
+            [nameof(BrakeDeadzoneFilter.FastAimThreshold)] = "Motion-Speed Threshold"
         };
         foreach (KeyValuePair<string, string> setting in expectedDisplayNames)
         {
@@ -333,20 +342,20 @@ internal static class Program
 
     private static void DuplicateReportsStayTransparent()
     {
-        var engine = new AdvancedAimEngine
+        var processor = new MotionStabilityProcessor
         {
             StabilityRadius = 0f,
-            StopAssist = 1f
+            EndpointBrake = 1f
         };
-        engine.Reset(Vector2.Zero);
+        processor.Reset(Vector2.Zero);
         for (int step = 1; step <= 8; step++)
         {
             Vector2 input = new(step, 0f);
-            engine.Process(input, 0.005f, 200f, true);
+            processor.Process(input, 0.005f, 200f, true);
         }
 
         Vector2 duplicate = new(8f, 0f);
-        Equal(duplicate, engine.Process(duplicate, 0.005f, 0f, false), 0.000001f);
+        Equal(duplicate, processor.Process(duplicate, 0.005f, 0f, false), 0.000001f);
 
         var filter = new BrakeDeadzoneFilter { AdvancedFeatures = true };
         IDeviceReport? emitted = null;
@@ -369,7 +378,7 @@ internal static class Program
             "Pressure or button data changed on a coordinate duplicate.");
     }
 
-    private static void AdvancedGateIsTransparent()
+    private static void AdditionalStabilizationIsTransparent()
     {
         var basic = new BrakeDeadzoneFilter();
         var zeroed = new BrakeDeadzoneFilter
@@ -384,67 +393,67 @@ internal static class Program
         {
             Vector2 input = new(index * 17f, (index % 7) * 3f);
             FakeTabletReport basicReport = Report(input.X, input.Y);
-            FakeTabletReport advancedReport = Report(input.X, input.Y);
+            FakeTabletReport stabilizedReport = Report(input.X, input.Y);
             basic.Consume(basicReport);
-            zeroed.Consume(advancedReport);
-            Equal(basicReport.Position, advancedReport.Position, 0.0001f);
+            zeroed.Consume(stabilizedReport);
+            Equal(basicReport.Position, stabilizedReport.Position, 0.0001f);
         }
     }
 
     private static void EndpointHoldBehaves()
     {
-        var engine = new AdvancedAimEngine { StopAssist = 0f };
-        engine.Reset(Vector2.Zero);
+        var processor = new MotionStabilityProcessor { EndpointBrake = 0f };
+        processor.Reset(Vector2.Zero);
 
         for (int index = 1; index <= 200; index++)
         {
             Vector2 input = new(index * 0.05f, index * 0.01f);
-            Equal(input, engine.Process(input, 0.005f), 0.000001f);
+            Equal(input, processor.Process(input, 0.005f), 0.000001f);
         }
-        True(!engine.IsSettled, "Continuous movement was classified as stationary.");
+        True(!processor.IsSettled, "Continuous movement was classified as stationary.");
 
-        engine.Reset(Vector2.Zero);
+        processor.Reset(Vector2.Zero);
         for (int index = 0; index < 10; index++)
         {
             float chatter = (index & 1) == 0 ? 0.02f : -0.02f;
-            engine.Process(new Vector2(chatter, 0f), 0.005f);
+            processor.Process(new Vector2(chatter, 0f), 0.005f);
         }
-        True(engine.IsSettled, "Endpoint hold never settled.");
+        True(processor.IsSettled, "Endpoint hold never settled.");
 
-        Vector2 anchor = engine.Output;
-        Equal(anchor, engine.Process(new Vector2(0.04f, 0f), 0.005f), 0.001f);
-        Vector2 jump = engine.Process(new Vector2(4f, 0f), 0.005f);
+        Vector2 anchor = processor.Output;
+        Equal(anchor, processor.Process(new Vector2(0.04f, 0f), 0.005f), 0.001f);
+        Vector2 jump = processor.Process(new Vector2(4f, 0f), 0.005f);
         True(jump.X > 3.98f, "Endpoint hold did not release on new movement.");
 
-        engine.Reset(Vector2.Zero);
+        processor.Reset(Vector2.Zero);
         Vector2 thresholdPosition = new(0.30f, 0f);
-        engine.Process(thresholdPosition, 0.005f, 60f, true);
-        engine.Process(thresholdPosition, 0.005f, 0f, false);
-        engine.Process(thresholdPosition, 0.005f, 0f, false);
-        True(!engine.IsSettled, "Movement at the stop threshold entered the stationary window.");
-        engine.Process(thresholdPosition, 0.005f, 0f, false);
-        True(engine.IsSettled, "A real stationary dwell after threshold movement did not settle.");
+        processor.Process(thresholdPosition, 0.005f, 60f, true);
+        processor.Process(thresholdPosition, 0.005f, 0f, false);
+        processor.Process(thresholdPosition, 0.005f, 0f, false);
+        True(!processor.IsSettled, "Movement at the stop threshold entered the stationary window.");
+        processor.Process(thresholdPosition, 0.005f, 0f, false);
+        True(processor.IsSettled, "A real stationary dwell after threshold movement did not settle.");
     }
 
-    private static void StopAssistIsBounded()
+    private static void EndpointBrakeIsBounded()
     {
-        var assisted = new AdvancedAimEngine { StopAssist = 1f };
-        var direct = new AdvancedAimEngine { StopAssist = 0f };
-        assisted.Reset(Vector2.Zero);
+        var braked = new MotionStabilityProcessor { EndpointBrake = 1f };
+        var direct = new MotionStabilityProcessor { EndpointBrake = 0f };
+        braked.Reset(Vector2.Zero);
         direct.Reset(Vector2.Zero);
         for (int index = 1; index <= 8; index++)
         {
             Vector2 input = new(index, 0f);
-            assisted.Process(input, 0.005f);
+            braked.Process(input, 0.005f);
             direct.Process(input, 0.005f);
         }
 
         Vector2 endpoint = new(8.15f, 0f);
-        Vector2 assistedOutput = assisted.Process(endpoint, 0.005f);
+        Vector2 brakedOutput = braked.Process(endpoint, 0.005f);
         Vector2 directOutput = direct.Process(endpoint, 0.005f);
-        True(assistedOutput.X < directOutput.X, "Stop Assist did not react to deceleration.");
-        True(Vector2.Distance(assistedOutput, endpoint) <= 0.1001f,
-            "Stop Assist escaped its 0.10 mm leash.");
+        True(brakedOutput.X < directOutput.X, "Endpoint Brake did not react to deceleration.");
+        True(Vector2.Distance(brakedOutput, endpoint) <= 0.1001f,
+            "Endpoint Brake escaped its 0.10 mm leash.");
     }
 
     private static void RandomizedInputStaysFinite()
@@ -474,7 +483,7 @@ internal static class Program
     private static void HotPathsDoNotAllocate()
     {
         CheckNoAllocations(new BrakeDeadzoneFilter(), "Basic");
-        CheckNoAllocations(new BrakeDeadzoneFilter { AdvancedFeatures = true }, "Advanced");
+        CheckNoAllocations(new BrakeDeadzoneFilter { AdvancedFeatures = true }, "Additional stabilization");
     }
 
     private static void CheckNoAllocations(BrakeDeadzoneFilter filter, string name)
@@ -500,7 +509,7 @@ internal static class Program
     private static void PrintBenchmarks()
     {
         Benchmark(new BrakeDeadzoneFilter(), "Basic");
-        Benchmark(new BrakeDeadzoneFilter { AdvancedFeatures = true }, "Advanced");
+        Benchmark(new BrakeDeadzoneFilter { AdvancedFeatures = true }, "Additional stabilization");
     }
 
     private static void Benchmark(BrakeDeadzoneFilter filter, string name)

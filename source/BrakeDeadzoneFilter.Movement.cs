@@ -19,7 +19,7 @@ public sealed partial class BrakeDeadzoneFilter
 
         Vector2 filteredDelta = ApplyDirectionalDeadzone(rawDelta, speed, physicalSpeed);
         Vector2 target = _antichatterPosition + filteredDelta;
-        return AimMath.LimitOffset(target, rawPosition, MovementAntichatter);
+        return MotionMath.LimitOffset(target, rawPosition, MovementAntichatter);
     }
 
     private void UpdateMovementDirection(Vector2 rawDelta, float speed)
@@ -64,12 +64,12 @@ public sealed partial class BrakeDeadzoneFilter
         float forwardDistance = Vector2.Dot(rawDelta, _movementDirection);
         Vector2 forwardMovement = _movementDirection * forwardDistance;
         Vector2 sidewaysMovement = rawDelta - forwardMovement;
-        float fastBlend = AdvancedFeatures
-            ? AimMath.SmoothStep(physicalSpeed, FastAimThreshold * 0.50f, FastAimThreshold)
+        float fastBlend = AdditionalStabilizationEnabled
+            ? MotionMath.SmoothStep(physicalSpeed, MotionSpeedThreshold * 0.50f, MotionSpeedThreshold)
             : 0f;
-        float lateralDeadzone = deadzone * (1f + FastAimStability * fastBlend);
+        float lateralDeadzone = deadzone * (1f + FastMotionStability * fastBlend);
 
-        return forwardMovement + AimMath.ApplyDeadzone(sidewaysMovement, lateralDeadzone);
+        return forwardMovement + MotionMath.ApplyDeadzone(sidewaysMovement, lateralDeadzone);
     }
 
     private float GetBrakeFactor(float speed)
@@ -85,6 +85,6 @@ public sealed partial class BrakeDeadzoneFilter
             return 0f;
         }
 
-        return 1f - AimMath.SmoothStep(speed, fullBrakeSpeed, BrakeSpeed);
+        return 1f - MotionMath.SmoothStep(speed, fullBrakeSpeed, BrakeSpeed);
     }
 }

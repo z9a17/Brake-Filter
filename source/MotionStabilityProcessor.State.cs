@@ -3,7 +3,7 @@ using System.Numerics;
 
 namespace BrakeFilter;
 
-public sealed partial class AdvancedAimEngine
+public sealed partial class MotionStabilityProcessor
 {
     public void Clear()
     {
@@ -19,7 +19,7 @@ public sealed partial class AdvancedAimEngine
 
     public Vector2 Reset(Vector2 input)
     {
-        if (!AimMath.IsFinite(input))
+        if (!MotionMath.IsFinite(input))
         {
             Clear();
             return input;
@@ -48,7 +48,7 @@ public sealed partial class AdvancedAimEngine
             Vector2.DistanceSquared(input, _holdAnchor) <= holdRadius * holdRadius)
         {
             _previousInput = input;
-            _peakSpeed = MathF.Min(_peakSpeed, FastAimThreshold);
+            _peakSpeed = MathF.Min(_peakSpeed, MotionSpeedThreshold);
             _output = _holdAnchor;
             output = _output;
             return true;

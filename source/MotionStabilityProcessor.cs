@@ -4,21 +4,21 @@ using System.Numerics;
 namespace BrakeFilter;
 
 /// <summary>
-/// Allocation-free endpoint assistance operating in physical millimetres.
+/// Allocation-free endpoint and motion stabilization operating in physical millimetres.
 /// </summary>
-public sealed partial class AdvancedAimEngine
+public sealed partial class MotionStabilityProcessor
 {
     private const float MinimumDeltaTime = 0.00025f;
     private const float MaximumDeltaTime = 0.020f;
     private const float ResetTime = 0.050f;
     private const float PeakReleaseSeconds = 0.050f;
-    private const float MaximumStopAssistOffset = 0.10f;
+    private const float MaximumEndpointBrakeOffset = 0.10f;
     private const float HoldRadiusScale = 1.33f;
-    private const float StopAssistDropStart = 0.25f;
-    private const float StopAssistDropEnd = 0.75f;
-    private const float StopAssistApproachStartRatio = 0.50f;
-    private const float StopAssistEndpointStartRatio = 0.29f;
-    private const float StopAssistEndpointEndRatio = 0.75f;
+    private const float EndpointBrakeDropStart = 0.25f;
+    private const float EndpointBrakeDropEnd = 0.75f;
+    private const float EndpointBrakeApproachStartRatio = 0.50f;
+    private const float EndpointBrakeStartRatio = 0.29f;
+    private const float EndpointBrakeEndRatio = 0.75f;
 
     private bool _initialized;
     private bool _settled;
@@ -32,7 +32,7 @@ public sealed partial class AdvancedAimEngine
 
     public Vector2 Process(Vector2 input, float reportPeriodSeconds)
     {
-        if (!AimMath.IsFinite(input))
+        if (!MotionMath.IsFinite(input))
         {
             Clear();
             return input;
@@ -65,7 +65,7 @@ public sealed partial class AdvancedAimEngine
         float motionSpeed,
         bool hasMotionSample)
     {
-        if (!AimMath.IsFinite(input))
+        if (!MotionMath.IsFinite(input))
         {
             Clear();
             return input;
@@ -110,7 +110,7 @@ public sealed partial class AdvancedAimEngine
             ? MathF.Max(speed, decayedPeak)
             : decayedPeak;
 
-        bool needsSpeedDrop = hasMotionSample && (StabilityRadius > 0f || StopAssist > 0f);
+        bool needsSpeedDrop = hasMotionSample && (StabilityRadius > 0f || EndpointBrake > 0f);
         float speedDrop = needsSpeedDrop
             ? 1f - speed / MathF.Max(previousPeak, 1f)
             : 0f;
@@ -134,16 +134,16 @@ public sealed partial class AdvancedAimEngine
             return SettleAt(input);
         }
 
-        float brakeAmount = hasMotionSample && StopAssist > 0f
-            ? CalculateStopAssist(speed, previousPeak, speedDrop)
+        float brakeAmount = hasMotionSample && EndpointBrake > 0f
+            ? CalculateEndpointBrake(speed, previousPeak, speedDrop)
             : 0f;
         _output = brakeAmount > 0f
-            ? AimMath.LimitOffset(
+            ? MotionMath.LimitOffset(
                 Vector2.Lerp(input, _previousInput, brakeAmount),
                 input,
-                MaximumStopAssistOffset)
+                MaximumEndpointBrakeOffset)
             : input;
-        if (!AimMath.IsFinite(_output))
+        if (!MotionMath.IsFinite(_output))
         {
             return Reset(input);
         }
@@ -152,21 +152,21 @@ public sealed partial class AdvancedAimEngine
         return _output;
     }
 
-    private float CalculateStopAssist(float speed, float previousPeak, float speedDrop)
+    private float CalculateEndpointBrake(float speed, float previousPeak, float speedDrop)
     {
-        float dropFactor = AimMath.SmoothStep(
+        float dropFactor = MotionMath.SmoothStep(
             speedDrop,
-            StopAssistDropStart,
-            StopAssistDropEnd);
-        float approachFactor = AimMath.SmoothStep(
+            EndpointBrakeDropStart,
+            EndpointBrakeDropEnd);
+        float approachFactor = MotionMath.SmoothStep(
             previousPeak,
-            FastAimThreshold * StopAssistApproachStartRatio,
-            FastAimThreshold);
-        float endpointFactor = 1f - AimMath.SmoothStep(
+            MotionSpeedThreshold * EndpointBrakeApproachStartRatio,
+            MotionSpeedThreshold);
+        float endpointFactor = 1f - MotionMath.SmoothStep(
             speed,
-            FastAimThreshold * StopAssistEndpointStartRatio,
-            FastAimThreshold * StopAssistEndpointEndRatio);
+            MotionSpeedThreshold * EndpointBrakeStartRatio,
+            MotionSpeedThreshold * EndpointBrakeEndRatio);
 
-        return Math.Clamp(StopAssist * dropFactor * approachFactor * endpointFactor, 0f, 1f);
+        return Math.Clamp(EndpointBrake * dropFactor * approachFactor * endpointFactor, 0f, 1f);
     }
 }

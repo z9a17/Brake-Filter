@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 
 namespace BrakeFilter;
 
-internal static class AimMath
+internal static class MotionMath
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector2 ApplyDeadzone(Vector2 value, float deadzone)

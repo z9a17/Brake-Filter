@@ -3,7 +3,7 @@ using System.Numerics;
 
 namespace BrakeFilter;
 
-public sealed partial class AdvancedAimEngine
+public sealed partial class MotionStabilityProcessor
 {
     private const float StopCandidateSpeed = 60f;
     private const float StopDwellSeconds = 0.010f;
@@ -43,7 +43,7 @@ public sealed partial class AdvancedAimEngine
         bool strongDeceleration =
             hasMotionSample &&
             _stopCandidateArmed &&
-            previousPeak > MathF.Max(40f, FastAimThreshold * ApproachPeakThresholdRatio) &&
+            previousPeak > MathF.Max(40f, MotionSpeedThreshold * ApproachPeakThresholdRatio) &&
             speed < StopCandidateSpeed &&
             speedDrop > 0.50f;
 

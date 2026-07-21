@@ -42,13 +42,13 @@ internal sealed class PositionMotionEstimator
         _positionPeriod.Clear();
         _lastPosition = position;
         _elapsedSincePosition = 0f;
-        _initialized = AimMath.IsFinite(position);
+        _initialized = MotionMath.IsFinite(position);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public MotionFrame Observe(Vector2 position, float measuredArrivalPeriod)
     {
-        if (!AimMath.IsFinite(position) ||
+        if (!MotionMath.IsFinite(position) ||
             !float.IsFinite(measuredArrivalPeriod) ||
             measuredArrivalPeriod <= 0f)
         {

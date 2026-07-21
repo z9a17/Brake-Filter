@@ -8,12 +8,12 @@ namespace BrakeFilter;
 
 public sealed partial class BrakeDeadzoneFilter
 {
-    private const float AdvancedResetTime = 0.050f;
+    private const float MotionResetTime = 0.050f;
 
     private readonly PositionMotionEstimator _motionEstimator = new();
     private Vector2 _millimetresPerUnit = Vector2.One;
-    private long _advancedLastTimestamp;
-    private bool _advancedHasTimestamp;
+    private long _motionLastTimestamp;
+    private bool _motionHasTimestamp;
 
     [TabletReference]
     public TabletReference TabletReference
@@ -24,32 +24,32 @@ public sealed partial class BrakeDeadzoneFilter
             _millimetresPerUnit = digitizer is null
                 ? Vector2.One
                 : new Vector2(
-                    AimMath.SafeScale(digitizer.Width, digitizer.MaxX),
-                    AimMath.SafeScale(digitizer.Height, digitizer.MaxY));
+                    MotionMath.SafeScale(digitizer.Width, digitizer.MaxX),
+                    MotionMath.SafeScale(digitizer.Height, digitizer.MaxY));
             ClearState();
         }
     }
 
-    private MotionFrame MeasureAdvancedMotion(Vector2 rawPosition)
+    private MotionFrame MeasurePhysicalMotion(Vector2 rawPosition)
     {
-        if (!AdvancedFeatures)
+        if (!AdditionalStabilizationEnabled)
         {
             return default;
         }
 
         Vector2 physicalPosition = rawPosition * _millimetresPerUnit;
         long timestamp = Stopwatch.GetTimestamp();
-        if (!_advancedHasTimestamp)
+        if (!_motionHasTimestamp)
         {
-            _advancedLastTimestamp = timestamp;
-            _advancedHasTimestamp = true;
+            _motionLastTimestamp = timestamp;
+            _motionHasTimestamp = true;
             _motionEstimator.Reset(physicalPosition);
             return default;
         }
 
-        float measuredPeriod = (float)((timestamp - _advancedLastTimestamp) / (double)Stopwatch.Frequency);
-        _advancedLastTimestamp = timestamp;
-        if (!float.IsFinite(measuredPeriod) || measuredPeriod <= 0f || measuredPeriod > AdvancedResetTime)
+        float measuredPeriod = (float)((timestamp - _motionLastTimestamp) / (double)Stopwatch.Frequency);
+        _motionLastTimestamp = timestamp;
+        if (!float.IsFinite(measuredPeriod) || measuredPeriod <= 0f || measuredPeriod > MotionResetTime)
         {
             _motionEstimator.Reset(physicalPosition);
             return new MotionFrame(measuredPeriod, 0f, false);
@@ -58,48 +58,48 @@ public sealed partial class BrakeDeadzoneFilter
         return _motionEstimator.Observe(physicalPosition, measuredPeriod);
     }
 
-    private Vector2 ApplyAdvanced(Vector2 basicPosition, MotionFrame motion)
+    private Vector2 ApplyAdditionalStabilization(Vector2 basicPosition, MotionFrame motion)
     {
-        if (!AdvancedFeatures)
+        if (!AdditionalStabilizationEnabled)
         {
             return basicPosition;
         }
 
         Vector2 millimetrePosition = basicPosition * _millimetresPerUnit;
-        Vector2 advancedPosition = _advancedEngine.Process(
+        Vector2 stabilizedPosition = _stabilityProcessor.Process(
             millimetrePosition,
             motion.ElapsedPeriod,
             motion.Speed,
             motion.HasMotionSample);
-        if (!AimMath.IsFinite(advancedPosition))
+        if (!MotionMath.IsFinite(stabilizedPosition))
         {
-            ClearAdvancedState();
+            ClearAdditionalStabilizationState();
             return basicPosition;
         }
 
-        return advancedPosition / _millimetresPerUnit;
+        return stabilizedPosition / _millimetresPerUnit;
     }
 
-    private void ResetAdvanced(Vector2 rawPosition)
+    private void ResetAdditionalStabilization(Vector2 rawPosition)
     {
-        if (!AdvancedFeatures)
+        if (!AdditionalStabilizationEnabled)
         {
-            ClearAdvancedState();
+            ClearAdditionalStabilizationState();
             return;
         }
 
         Vector2 physicalPosition = rawPosition * _millimetresPerUnit;
-        _advancedEngine.Reset(physicalPosition);
+        _stabilityProcessor.Reset(physicalPosition);
         _motionEstimator.Reset(physicalPosition);
-        _advancedLastTimestamp = Stopwatch.GetTimestamp();
-        _advancedHasTimestamp = true;
+        _motionLastTimestamp = Stopwatch.GetTimestamp();
+        _motionHasTimestamp = true;
     }
 
-    private void ClearAdvancedState()
+    private void ClearAdditionalStabilizationState()
     {
-        _advancedEngine.Clear();
+        _stabilityProcessor.Clear();
         _motionEstimator.Clear();
-        _advancedLastTimestamp = 0;
-        _advancedHasTimestamp = false;
+        _motionLastTimestamp = 0;
+        _motionHasTimestamp = false;
     }
 }

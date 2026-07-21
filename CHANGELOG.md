@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.4
+
+- Renamed the internal `AdvancedAimEngine` to `MotionStabilityProcessor` and `AimMath` to `MotionMath` so the code describes tablet-motion processing accurately.
+- Renamed the OTD labels to Additional Stabilization, Endpoint Brake, Fast-Motion Stability, and Motion-Speed Threshold.
+- Replaced aim/assist terminology throughout active implementation code, tests, tooltips, assembly metadata, and documentation.
+- Retained legacy serialized property identifiers solely to preserve existing OpenTabletDriver profiles and settings.
+- Kept all algorithms, default values, bounds, and the plugin CLR identity unchanged.
+
 ## v0.3.3
 
 - Fixed custom descriptions being attached to the unit wrapper while OTD's numeric input retained only its automatic minimum/maximum tooltip.

@@ -18,7 +18,7 @@ public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDe
     private const float ResetDistanceSquared = ResetDistance * ResetDistance;
     private const float SpeedSmoothing = 0.35f;
 
-    private readonly AdvancedAimEngine _advancedEngine = new();
+    private readonly MotionStabilityProcessor _stabilityProcessor = new();
     private bool _initialized;
     private Vector2 _previousRawPosition;
     private Vector2 _antichatterPosition;
@@ -44,7 +44,7 @@ public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDe
         }
 
         Vector2 rawPosition = tabletReport.Position;
-        if (!AimMath.IsFinite(rawPosition))
+        if (!MotionMath.IsFinite(rawPosition))
         {
             ClearState();
             Emit?.Invoke(report);
@@ -54,7 +54,7 @@ public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDe
         if (!_initialized)
         {
             Reset(rawPosition);
-            ResetAdvanced(rawPosition);
+            ResetAdditionalStabilization(rawPosition);
             Emit?.Invoke(report);
             return;
         }
@@ -64,17 +64,17 @@ public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDe
         if (!float.IsFinite(distanceSquared) || distanceSquared > ResetDistanceSquared)
         {
             Reset(rawPosition);
-            ResetAdvanced(rawPosition);
+            ResetAdditionalStabilization(rawPosition);
             tabletReport.Position = rawPosition;
             Emit?.Invoke(report);
             return;
         }
 
         float speed = MathF.Sqrt(distanceSquared);
-        MotionFrame motion = MeasureAdvancedMotion(rawPosition);
+        MotionFrame motion = MeasurePhysicalMotion(rawPosition);
         Vector2 antichatterTarget = ApplyMovementFilter(rawPosition, rawDelta, speed, motion.Speed);
 
-        _smoothedSpeed = AimMath.Lerp(_smoothedSpeed, speed, SpeedSmoothing);
+        _smoothedSpeed = MotionMath.Lerp(_smoothedSpeed, speed, SpeedSmoothing);
         float brakeAmount = BrakeSmoothing * GetBrakeFactor(MathF.Max(speed, _smoothedSpeed));
 
         // Previous raw input is a bounded one-report anchor, never recursive output.
@@ -82,7 +82,7 @@ public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDe
             ? Vector2.Lerp(antichatterTarget, _previousRawPosition, brakeAmount)
             : antichatterTarget;
 
-        if (!AimMath.IsFinite(output))
+        if (!MotionMath.IsFinite(output))
         {
             Reset(rawPosition);
             output = rawPosition;
@@ -93,7 +93,7 @@ public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDe
             _antichatterPosition = antichatterTarget;
         }
 
-        tabletReport.Position = ApplyAdvanced(output, motion);
+        tabletReport.Position = ApplyAdditionalStabilization(output, motion);
         Emit?.Invoke(report);
     }
 
@@ -104,7 +104,7 @@ public sealed partial class BrakeDeadzoneFilter : IPositionedPipelineElement<IDe
         _antichatterPosition = Vector2.Zero;
         _movementDirection = Vector2.Zero;
         _smoothedSpeed = 0f;
-        ClearAdvancedState();
+        ClearAdditionalStabilizationState();
     }
 
     private void Reset(Vector2 rawPosition)
