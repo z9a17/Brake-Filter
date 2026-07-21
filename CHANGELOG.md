@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.6
+
+- Added the `metadata.json` required by OpenTabletDriver 0.6.7's Plugin Manager detail view.
+- Changed the displayed plugin name to `Brake Filter`; its version now appears only in the dedicated Plugin Version field.
+- Added owner, description, supported driver version, source, documentation, and MIT license metadata.
+- Added deterministic package-layout validation while keeping all filtering behavior and settings unchanged.
+
 ## v0.3.5
 
 - Added tag-driven GitHub Actions builds, tests, release publishing, and build-provenance attestations.

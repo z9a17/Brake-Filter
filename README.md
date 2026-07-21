@@ -1,15 +1,15 @@
-# Brake Filter v0.3.5
+# Brake Filter v0.3.6
 
 Brake Filter is a low-latency OpenTabletDriver 0.6.7 pre-transform filter. It combines direction-aware movement anti-chatter and bounded slow-movement braking with optional endpoint and fast-motion stabilization.
 
-The plugin is displayed simply as `Brake Filter` inside OpenTabletDriver. Version numbers are shown only on GitHub and in the assembly metadata.
+The plugin is displayed simply as `Brake Filter` inside OpenTabletDriver. Its version appears in the dedicated **Plugin Version** field instead of being appended to the plugin name.
 
 > **Development disclosure:** Parts of this codebase and its documentation were written, reviewed, and refactored with assistance from GPT 5.6-Sol. Contributors should evaluate the implementation and tests as they would for any other third-party plugin rather than assuming AI-assisted code is correct.
 
 ## Requirements
 
 - OpenTabletDriver 0.6.7
-- .NET 8 SDK to build from source
+- The .NET SDK pinned in `global.json` to build from source; the plugin output targets .NET 8
 
 ## Normal settings
 
@@ -53,12 +53,12 @@ From PowerShell in this directory:
 The script restores dependencies from NuGet, builds the plugin, runs 14 focused core tests, and produces:
 
 - `release\BrakeFilter.dll`
-- `release\Brake-Filter-v0.3.5.zip`
+- `release\Brake-Filter-v0.3.6.zip`
 - `release\SHA256SUMS.txt`
 
 ## Install and set up
 
-1. Download `Brake-Filter-v0.3.5.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
+1. Download `Brake-Filter-v0.3.6.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
 2. Open OpenTabletDriver and make sure your tablet is detected.
 3. Open **Plugins > Open Plugin Manager**.
 4. In the Plugin Manager, choose **Install plugin...** and select the downloaded ZIP.
@@ -67,6 +67,8 @@ The script restores dependencies from NuGet, builds the plugin, runs 14 focused 
 7. Start with the defaults: Movement Anti-Chatter `10`, Brake Strength `0.45`, and Brake Start Speed `90`.
 8. Leave Additional Stabilization off at first. Enable it only if you want endpoint and fast-motion controls.
 9. Hover directly over any setting's input field or checkbox to see its full configuration description, range, and default.
+
+The installable ZIP includes OTD metadata for the plugin name, owner, description, supported driver version, plugin version, source repository, documentation, and MIT license.
 
 Use only this filter while tuning it. Stacking multiple smoothing or anti-chatter filters can add latency and make the result difficult to diagnose.
 

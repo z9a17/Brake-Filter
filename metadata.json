@@ -1,0 +1,10 @@
+{
+  "Name": "Brake Filter",
+  "Owner": "z9a17",
+  "Description": "Low-latency tablet anti-chatter and bounded braking with optional endpoint and fast-motion stabilization.",
+  "PluginVersion": "0.3.6.0",
+  "SupportedDriverVersion": "0.6.7.0",
+  "RepositoryUrl": "https://github.com/z9a17/Brake-Filter",
+  "WikiUrl": "https://github.com/z9a17/Brake-Filter#readme",
+  "LicenseIdentifier": "MIT"
+}
