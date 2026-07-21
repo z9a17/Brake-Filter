@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.3.7
+
+- Enforced and normalized packaged metadata to UTF-8 with LF line endings so Windows and GitHub checkouts produce the same ZIP.
+- Verified the CI and local DLL and ZIP artifacts byte-for-byte; filtering behavior and settings remain unchanged.
+
 ## v0.3.6
 
 - Added the `metadata.json` required by OpenTabletDriver 0.6.7's Plugin Manager detail view.

@@ -77,7 +77,8 @@ function Add-DeterministicZipEntry {
         [Parameter(Mandatory)]
         [string] $SourcePath,
         [Parameter(Mandatory)]
-        [string] $EntryName
+        [string] $EntryName,
+        [switch] $NormalizeText
     )
 
     $entry = $Archive.CreateEntry(
@@ -87,12 +88,20 @@ function Add-DeterministicZipEntry {
         1980, 1, 1, 0, 0, 0, [System.TimeSpan]::Zero)
     $entryStream = $entry.Open()
     try {
-        $inputStream = [System.IO.File]::OpenRead($SourcePath)
-        try {
-            $inputStream.CopyTo($entryStream)
+        if ($NormalizeText) {
+            $text = [System.IO.File]::ReadAllText($SourcePath)
+            $normalizedText = $text.Replace("`r`n", "`n").Replace("`r", "`n")
+            $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($normalizedText)
+            $entryStream.Write($bytes, 0, $bytes.Length)
         }
-        finally {
-            $inputStream.Dispose()
+        else {
+            $inputStream = [System.IO.File]::OpenRead($SourcePath)
+            try {
+                $inputStream.CopyTo($entryStream)
+            }
+            finally {
+                $inputStream.Dispose()
+            }
         }
     }
     finally {
@@ -112,7 +121,7 @@ try {
         $false)
     try {
         Add-DeterministicZipEntry $archive $releaseDll "BrakeFilter.dll"
-        Add-DeterministicZipEntry $archive $metadataFile "metadata.json"
+        Add-DeterministicZipEntry $archive $metadataFile "metadata.json" -NormalizeText
     }
     finally {
         $archive.Dispose()

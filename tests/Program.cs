@@ -58,7 +58,7 @@ internal static class Program
         Equal(120f, filter.FastAimThreshold);
 
         Version? version = typeof(BrakeDeadzoneFilter).Assembly.GetName().Version;
-        True(version == new Version(0, 3, 6, 0), $"Unexpected assembly version: {version}");
+        True(version == new Version(0, 3, 7, 0), $"Unexpected assembly version: {version}");
         True(typeof(BrakeDeadzoneFilter).FullName == "BrakeFilter.BrakeDeadzoneFilter",
             "The saved-profile type identity changed.");
         var assembly = typeof(BrakeDeadzoneFilter).Assembly;
