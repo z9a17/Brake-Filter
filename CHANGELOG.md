@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.5
+
+- Added tag-driven GitHub Actions builds, tests, release publishing, and build-provenance attestations.
+- Pinned the .NET SDK, NuGet dependency graph, and GitHub Actions revisions for repeatable verification.
+- Added deterministic ZIP timestamps and a published `SHA256SUMS.txt` for every release.
+- Kept all filtering behavior, setting names, ranges, and defaults unchanged from v0.3.4.
+
 ## v0.3.4
 
 - Renamed the internal `AdvancedAimEngine` to `MotionStabilityProcessor` and `AimMath` to `MotionMath` so the code describes tablet-motion processing accurately.

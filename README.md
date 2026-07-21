@@ -1,4 +1,4 @@
-# Brake Filter v0.3.4
+# Brake Filter v0.3.5
 
 Brake Filter is a low-latency OpenTabletDriver 0.6.7 pre-transform filter. It combines direction-aware movement anti-chatter and bounded slow-movement braking with optional endpoint and fast-motion stabilization.
 
@@ -53,11 +53,12 @@ From PowerShell in this directory:
 The script restores dependencies from NuGet, builds the plugin, runs 14 focused core tests, and produces:
 
 - `release\BrakeFilter.dll`
-- `release\Brake-Filter-v0.3.4.zip`
+- `release\Brake-Filter-v0.3.5.zip`
+- `release\SHA256SUMS.txt`
 
 ## Install and set up
 
-1. Download `Brake-Filter-v0.3.4.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
+1. Download `Brake-Filter-v0.3.5.zip` from the [latest release](https://github.com/z9a17/Brake-Filter/releases/latest). Do not extract it.
 2. Open OpenTabletDriver and make sure your tablet is detected.
 3. Open **Plugins > Open Plugin Manager**.
 4. In the Plugin Manager, choose **Install plugin...** and select the downloaded ZIP.
@@ -68,6 +69,10 @@ The script restores dependencies from NuGet, builds the plugin, runs 14 focused 
 9. Hover directly over any setting's input field or checkbox to see its full configuration description, range, and default.
 
 Use only this filter while tuning it. Stacking multiple smoothing or anti-chatter filters can add latency and make the result difficult to diagnose.
+
+## Release verification
+
+Starting with v0.3.5, releases are built and tested by GitHub Actions directly from their version tag. Each release includes `SHA256SUMS.txt`, and the DLL and installable ZIP receive a GitHub build-provenance attestation. The repository pins its .NET SDK, NuGet dependency graph, and GitHub Actions to make independent verification repeatable.
 
 ## Quick tuning
 

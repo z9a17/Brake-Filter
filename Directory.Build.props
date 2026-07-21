@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
+  </PropertyGroup>
+</Project>

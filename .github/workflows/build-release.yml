@@ -1,0 +1,115 @@
+name: Build and release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: windows-2022
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Install pinned .NET SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Restore locked dependencies
+        shell: pwsh
+        run: dotnet restore tests/BrakeFilter.Tests.csproj --locked-mode
+
+      - name: Build, test, and package
+        shell: pwsh
+        run: .\build.ps1
+
+      - name: Verify tag and release checksums
+        shell: pwsh
+        run: |
+          $project = [xml](Get-Content -Raw source/BrakeFilter.csproj)
+          $version = $project.Project.PropertyGroup.Version
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+              throw "Tag $env:GITHUB_REF_NAME does not match project version v$version."
+          }
+
+          $expected = @{}
+          foreach ($line in Get-Content release/SHA256SUMS.txt) {
+              if ($line -notmatch '^([0-9a-f]{64})  (.+)$') {
+                  throw "Invalid checksum line: $line"
+              }
+
+              $expected[$Matches[2]] = $Matches[1]
+          }
+
+          foreach ($name in @('BrakeFilter.dll', "Brake-Filter-v$version.zip")) {
+              $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath "release/$name").Hash.ToLowerInvariant()
+              if ($expected[$name] -ne $actual) {
+                  throw "Checksum verification failed for $name."
+              }
+          }
+
+      - name: Upload verified release files
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: brake-filter-release
+          path: |
+            release/BrakeFilter.dll
+            release/Brake-Filter-v*.zip
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish tagged release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: windows-2022
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download verified release files
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: brake-filter-release
+          path: release
+
+      - name: Attest release provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373
+        with:
+          subject-path: |
+            release/BrakeFilter.dll
+            release/Brake-Filter-*.zip
+
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $zip = Get-ChildItem -LiteralPath release -Filter 'Brake-Filter-v*.zip'
+          if ($zip.Count -ne 1) {
+              throw "Expected exactly one release ZIP, found $($zip.Count)."
+          }
+
+          gh release create $env:GITHUB_REF_NAME `
+            release/BrakeFilter.dll `
+            $zip.FullName `
+            release/SHA256SUMS.txt `
+            --verify-tag `
+            --title "Brake Filter $env:GITHUB_REF_NAME" `
+            --generate-notes
