@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - dev/low-latency-radial-follow
     tags:
       - "v*"
   pull_request:
@@ -54,7 +55,7 @@ jobs:
               $expected[$Matches[2]] = $Matches[1]
           }
 
-          foreach ($name in @('BrakeFilter.dll', "Brake-Filter-v$version.zip")) {
+          foreach ($name in @('BrakeFilter.RadialDev.dll', "Brake-Filter-Radial-Dev-v$version.zip")) {
               $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath "release/$name").Hash.ToLowerInvariant()
               if ($expected[$name] -ne $actual) {
                   throw "Checksum verification failed for $name."
@@ -66,8 +67,8 @@ jobs:
         with:
           name: brake-filter-release
           path: |
-            release/BrakeFilter.dll
-            release/Brake-Filter-v*.zip
+            release/BrakeFilter.RadialDev.dll
+            release/Brake-Filter-Radial-Dev-v*.zip
             release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
@@ -92,8 +93,8 @@ jobs:
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373
         with:
           subject-path: |
-            release/BrakeFilter.dll
-            release/Brake-Filter-*.zip
+            release/BrakeFilter.RadialDev.dll
+            release/Brake-Filter-Radial-Dev-*.zip
 
       - name: Create GitHub release
         shell: pwsh
@@ -101,15 +102,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          $zip = Get-ChildItem -LiteralPath release -Filter 'Brake-Filter-v*.zip'
+          $zip = Get-ChildItem -LiteralPath release -Filter 'Brake-Filter-Radial-Dev-v*.zip'
           if ($zip.Count -ne 1) {
               throw "Expected exactly one release ZIP, found $($zip.Count)."
           }
 
-          gh release create $env:GITHUB_REF_NAME `
-            release/BrakeFilter.dll `
-            $zip.FullName `
-            release/SHA256SUMS.txt `
-            --verify-tag `
-            --title "Brake Filter $env:GITHUB_REF_NAME" `
-            --generate-notes
+          $releaseArguments = @(
+            $env:GITHUB_REF_NAME,
+            'release/BrakeFilter.RadialDev.dll',
+            $zip.FullName,
+            'release/SHA256SUMS.txt',
+            '--verify-tag',
+            '--title', "Brake Filter Low-Latency Radial $env:GITHUB_REF_NAME",
+            '--generate-notes'
+          )
+          if ($env:GITHUB_REF_NAME -match '-dev\.') {
+            $releaseArguments += '--prerelease'
+          }
+          gh release create @releaseArguments

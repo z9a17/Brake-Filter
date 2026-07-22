@@ -9,16 +9,21 @@ $root = [System.IO.Path]::GetFullPath($PSScriptRoot)
 $sourceProject = Join-Path $root "source\BrakeFilter.csproj"
 $testProject = Join-Path $root "tests\BrakeFilter.Tests.csproj"
 $metadataFile = Join-Path $root "metadata.json"
-$builtDll = Join-Path $root "source\bin\$Configuration\net8.0\BrakeFilter.dll"
+$builtDll = Join-Path $root "source\bin\$Configuration\net8.0\BrakeFilter.RadialDev.dll"
 $releaseDirectory = Join-Path $root "release"
-$releaseDll = Join-Path $releaseDirectory "BrakeFilter.dll"
+$releaseDll = Join-Path $releaseDirectory "BrakeFilter.RadialDev.dll"
 $checksumFile = Join-Path $releaseDirectory "SHA256SUMS.txt"
 $versionNode = Select-Xml -LiteralPath $sourceProject -XPath "/Project/PropertyGroup/Version"
 if ($null -eq $versionNode) {
     throw "Version is missing from $sourceProject"
 }
 $version = $versionNode.Node.InnerText
-$releaseZip = Join-Path $releaseDirectory "Brake-Filter-v$version.zip"
+$pluginVersionNode = Select-Xml -LiteralPath $sourceProject -XPath "/Project/PropertyGroup/PluginVersion"
+if ($null -eq $pluginVersionNode) {
+    throw "PluginVersion is missing from $sourceProject"
+}
+$pluginVersion = $pluginVersionNode.Node.InnerText
+$releaseZip = Join-Path $releaseDirectory "Brake-Filter-Radial-Dev-v$version.zip"
 
 if (-not (Test-Path -LiteralPath $metadataFile -PathType Leaf)) {
     throw "Plugin metadata is missing from $metadataFile"
@@ -26,9 +31,9 @@ if (-not (Test-Path -LiteralPath $metadataFile -PathType Leaf)) {
 
 $metadata = Get-Content -Raw -LiteralPath $metadataFile | ConvertFrom-Json
 $expectedMetadata = [ordered]@{
-    Name = "Brake Filter"
+    Name = "Brake Filter - Low-Latency Radial Dev"
     Owner = "z9a17"
-    PluginVersion = "$version.0"
+    PluginVersion = $pluginVersion
     SupportedDriverVersion = "0.6.7.0"
     RepositoryUrl = "https://github.com/z9a17/Brake-Filter"
     WikiUrl = "https://github.com/z9a17/Brake-Filter#readme"
@@ -120,7 +125,7 @@ try {
         [System.IO.Compression.ZipArchiveMode]::Create,
         $false)
     try {
-        Add-DeterministicZipEntry $archive $releaseDll "BrakeFilter.dll"
+        Add-DeterministicZipEntry $archive $releaseDll "BrakeFilter.RadialDev.dll"
         Add-DeterministicZipEntry $archive $metadataFile "metadata.json" -NormalizeText
     }
     finally {
@@ -140,9 +145,9 @@ try {
     try {
         $entryNames = @($package.Entries | ForEach-Object FullName | Sort-Object)
         if ($entryNames.Count -ne 2 -or
-            $entryNames[0] -ne "BrakeFilter.dll" -or
+            $entryNames[0] -ne "BrakeFilter.RadialDev.dll" -or
             $entryNames[1] -ne "metadata.json") {
-            throw "Release ZIP must contain only BrakeFilter.dll and metadata.json at its top level."
+            throw "Release ZIP must contain only BrakeFilter.RadialDev.dll and metadata.json at its top level."
         }
     }
     finally {

@@ -1,15 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <AssemblyName>BrakeFilter</AssemblyName>
-    <RootNamespace>BrakeFilter</RootNamespace>
-    <Version>0.3.7</Version>
-    <AssemblyVersion>0.3.7.0</AssemblyVersion>
-    <FileVersion>0.3.7.0</FileVersion>
-    <InformationalVersion>0.3.7</InformationalVersion>
-    <AssemblyTitle>Brake Filter</AssemblyTitle>
-    <Product>Brake Filter</Product>
-    <Description>Low-latency tablet-motion anti-chatter, braking, and optional endpoint stabilization for OpenTabletDriver.</Description>
+    <AssemblyName>BrakeFilter.RadialDev</AssemblyName>
+    <RootNamespace>BrakeFilter.RadialDev</RootNamespace>
+    <Version>0.4.0-dev.1</Version>
+    <PluginVersion>0.4.0.1</PluginVersion>
+    <AssemblyVersion>0.4.0.1</AssemblyVersion>
+    <FileVersion>0.4.0.1</FileVersion>
+    <InformationalVersion>0.4.0-dev.1</InformationalVersion>
+    <AssemblyTitle>Brake Filter - Low-Latency Radial Dev</AssemblyTitle>
+    <Product>Brake Filter - Low-Latency Radial Dev</Product>
+    <Description>Experimental bounded radial tablet smoothing with fast-motion and reversal release for OpenTabletDriver.</Description>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>12.0</LangVersion>
